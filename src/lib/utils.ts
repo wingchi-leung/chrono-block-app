@@ -61,8 +61,9 @@ export function getEndOfDay(date: Date): Date {
 export function getStartOfWeek(date: Date): Date {
   const result = new Date(date);
   const day = result.getDay();
-  const diff = result.getDate() - day;
-  result.setDate(diff);
+  // 周一为起始日：周日(0)需要回退6天，其他日期回退(day-1)天
+  const diff = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + diff);
   result.setHours(0, 0, 0, 0);
   return result;
 }

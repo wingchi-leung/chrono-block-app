@@ -96,8 +96,8 @@ export function Header() {
       case 'day':
         return format(selectedDate, 'yyyy年M月d日 EEEE', { locale: zhCN });
       case 'week':
-        const start = startOfWeek(selectedDate, { weekStartsOn: 0 });
-        const end = endOfWeek(selectedDate, { weekStartsOn: 0 });
+        const start = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        const end = endOfWeek(selectedDate, { weekStartsOn: 1 });
         return `${format(start, 'M月d日', { locale: zhCN })} - ${format(
           end,
           'M月d日',

@@ -207,7 +207,7 @@ export const useStore = create<AppState>()(
       checkTimeConflict: (start: Date, end: Date, excludeId?: string) => {
         const { timeBlocks } = get();
 
-        return timeBlocks.some((block) => {
+        const conflicting = timeBlocks.find((block) => {
           if (excludeId && block.id === excludeId) return false;
 
           return areIntervalsOverlapping(
@@ -216,6 +216,16 @@ export const useStore = create<AppState>()(
             { inclusive: false }
           );
         });
+
+        if (conflicting) {
+          console.warn('[checkTimeConflict] 冲突块:', {
+            conflictingBlock: { id: conflicting.id, title: conflicting.title, start_time: conflicting.start_time, end_time: conflicting.end_time },
+            checking: { start: start.toISOString(), end: end.toISOString() },
+            totalBlocksInStore: timeBlocks.length,
+          });
+        }
+
+        return !!conflicting;
       },
       convertTaskToTimeBlock: async (taskId: string, start: Date) => {
         const { tasks, checkTimeConflict } = get();

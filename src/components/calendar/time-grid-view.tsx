@@ -125,35 +125,26 @@ const getBlockStyle = (
 ): CSSProperties => {
   if (status === 'completed') {
     return {
-      backgroundColor: hexToRgba(palette.accent, selected ? 0.34 : 0.28),
-      borderColor: hexToRgba(palette.accent, selected ? 0.58 : 0.42),
-      boxShadow: selected
-        ? `0 10px 24px ${hexToRgba(palette.accent, 0.22)}`
-        : `0 6px 16px ${hexToRgba(palette.accent, 0.14)}`,
-      backdropFilter: 'blur(10px)',
-      opacity: 0.9,
+      backgroundColor: hexToRgba(palette.accent, selected ? 0.18 : 0.12),
+      borderColor: hexToRgba(palette.accent, selected ? 0.36 : 0.22),
+      boxShadow: selected ? `0 0 0 1px ${hexToRgba(palette.accent, 0.08)}` : 'none',
+      opacity: 0.92,
     };
   }
 
   if (status === 'incomplete') {
     return {
-      backgroundColor: hexToRgba(palette.accent, selected ? 0.26 : 0.22),
-      borderColor: hexToRgba(palette.accent, selected ? 0.52 : 0.38),
-      boxShadow: selected
-        ? `0 10px 24px ${hexToRgba(palette.accent, 0.18)}`
-        : `0 5px 14px ${hexToRgba(palette.accent, 0.1)}`,
-      backdropFilter: 'blur(10px)',
-      opacity: 0.78,
+      backgroundColor: hexToRgba(palette.accent, selected ? 0.14 : 0.1),
+      borderColor: hexToRgba(palette.accent, selected ? 0.3 : 0.2),
+      boxShadow: selected ? `0 0 0 1px ${hexToRgba(palette.accent, 0.06)}` : 'none',
+      opacity: 0.84,
     };
   }
 
   return {
-    backgroundColor: selected ? hexToRgba(palette.accent, 0.3) : palette.surface,
-    borderColor: selected ? hexToRgba(palette.accent, 0.56) : palette.border,
-    boxShadow: selected
-      ? `0 12px 28px ${hexToRgba(palette.accent, 0.22)}`
-      : `0 8px 20px ${palette.glow}`,
-    backdropFilter: 'blur(10px)',
+    backgroundColor: selected ? hexToRgba(palette.accent, 0.16) : hexToRgba(palette.accent, 0.08),
+    borderColor: selected ? hexToRgba(palette.accent, 0.32) : hexToRgba(palette.accent, 0.18),
+    boxShadow: selected ? `0 0 0 1px ${hexToRgba(palette.accent, 0.08)}` : 'none',
   };
 };
 
@@ -249,6 +240,9 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
   const [dayCalendarWidth, setDayCalendarWidth] = useState(42);
   const [isResizingDayPanels, setIsResizingDayPanels] = useState(false);
   const [isWideDayLayout, setIsWideDayLayout] = useState(false);
+  const [taskSidebarWidth, setTaskSidebarWidth] = useState(380);
+  const [isResizingTaskSidebar, setIsResizingTaskSidebar] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridBodyRef = useRef<HTMLDivElement>(null);
   const daySplitRef = useRef<HTMLDivElement>(null);
@@ -259,7 +253,7 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
       return [startOfDay(selectedDate)];
     }
 
-    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
     return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   }, [mode, selectedDate]);
 
@@ -733,6 +727,42 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
     };
   }, [isResizingDayPanels, isWideDayLayout, mode]);
 
+  useEffect(() => {
+    if (!isResizingTaskSidebar || !isTaskSidebarOpen) {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const container = layoutRef.current;
+      if (!container) {
+        return;
+      }
+
+      const rect = container.getBoundingClientRect();
+      const nextWidth = rect.right - event.clientX;
+      const clampedWidth = Math.min(520, Math.max(300, nextWidth));
+      setTaskSidebarWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTaskSidebar(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp, { once: true });
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingTaskSidebar, isTaskSidebarOpen]);
+
   const handleTaskDrop = async (event: ReactDragEvent<HTMLDivElement>, dayIndex: number) => {
     event.preventDefault();
     setDragOverState(null);
@@ -933,69 +963,29 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
   };
 
   return (
-    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-1 bg-background">
-      <div
-        className={cn(
-          'hidden shrink-0 border-r border-border bg-muted/20 transition-[width] duration-200 lg:block',
-          isTaskSidebarOpen ? 'w-[360px]' : 'w-[60px]'
-        )}
-      >
-        {isTaskSidebarOpen ? (
-          <div className="h-full w-[360px]">
-            <TaskList onCollapse={() => setIsTaskSidebarOpen(false)} />
-          </div>
-        ) : (
-          <div className="flex h-full w-[60px] flex-col items-center gap-4 px-2 py-5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-2xl"
-              onClick={() => setIsTaskSidebarOpen(true)}
-              aria-label="展开任务栏"
-              title="展开任务栏"
-            >
-              <PanelLeftOpen size={17} />
-            </Button>
-            <div className="h-10 w-px bg-border/80" />
-            <div className="-rotate-90 text-[11px] font-semibold tracking-[0.24em] text-muted-foreground">
-              PLANNER
-            </div>
-          </div>
-        )}
-      </div>
-
+    <div ref={layoutRef} className="relative flex h-full min-h-0 w-full min-w-0 flex-1 bg-background">
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <CalendarDays size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">
-                {mode === 'day' ? '日程视图' : '周视图时间网格'}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {mode === 'day' ? '专注安排今天的时间块。' : '按整周节奏快速调整安排。'}
-              </p>
-            </div>
+        <div className="border-b border-border/50 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CalendarDays size={14} />
+            <span>{mode === 'day' ? '今天日程' : '本周日程'}</span>
           </div>
         </div>
 
         {message && (
           <div
             className={cn(
-              'mx-4 mt-3 rounded-xl border px-4 py-3 text-sm',
+              'mx-4 mt-3 rounded-lg border px-3 py-2 text-sm',
               message.tone === 'error'
-                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+                ? 'border-red-200/70 bg-red-50/60 text-red-700 dark:border-red-900/70 dark:bg-red-950/20 dark:text-red-200'
+                : 'border-emerald-200/70 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/20 dark:text-emerald-200'
             )}
           >
             {message.text}
           </div>
         )}
 
-        <div className={cn('flex min-h-0 flex-1', mode === 'day' ? 'px-6 pb-6' : '')}>
+        <div className={cn('flex min-h-0 flex-1', mode === 'day' ? 'px-4 pb-4' : '')}>
           <div
             ref={mode === 'day' ? daySplitRef : undefined}
             className={cn(
@@ -1015,10 +1005,10 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
               }
             >
             <div
-              className="grid border-b border-border"
+              className="grid border-b border-border/50"
               style={{ gridTemplateColumns }}
             >
-              <div className="border-r border-border bg-background/80 px-3 py-3 text-xs font-medium text-muted-foreground">
+              <div className="border-r border-border/50 bg-background px-3 py-2 text-xs font-medium text-muted-foreground">
                 时间
               </div>
               {visibleDays.map((day) => (
@@ -1027,8 +1017,8 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                   type="button"
                   onClick={() => setSelectedDate(day)}
                   className={cn(
-                    'border-r border-border px-3 py-3 text-left transition-colors last:border-r-0',
-                    isToday(day) ? 'bg-primary/5' : 'bg-background/80 hover:bg-muted/40'
+                    'border-r border-border/50 px-3 py-2 text-left transition-colors last:border-r-0',
+                    isToday(day) ? 'bg-muted/[0.22]' : 'bg-background hover:bg-muted/[0.22]'
                   )}
                 >
                   <div className="text-xs text-muted-foreground">
@@ -1037,8 +1027,8 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                   <div className="mt-1 flex items-center gap-2">
                     <span
                       className={cn(
-                        'inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-semibold',
-                        isToday(day) && 'bg-primary text-primary-foreground'
+                        'inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm font-medium',
+                        isToday(day) && 'bg-foreground text-background'
                       )}
                     >
                       {format(day, 'd')}
@@ -1051,25 +1041,25 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
 
             <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
               <div className="pointer-events-none absolute left-0 top-1 z-20 w-[72px] pr-3 text-right text-xs font-medium text-muted-foreground">
-                <span className="rounded-full bg-background/90 px-1.5 py-0.5 shadow-sm">00:00</span>
+                <span className="bg-background px-1.5 py-0.5">00:00</span>
               </div>
               <div className="pointer-events-none absolute bottom-3 left-0 z-20 w-[72px] pr-3 text-right text-xs font-medium text-muted-foreground">
-                <span className="rounded-full bg-background/90 px-1.5 py-0.5 shadow-sm">24:00</span>
+                <span className="bg-background px-1.5 py-0.5">24:00</span>
               </div>
               <div
                 ref={gridBodyRef}
                 className="grid min-w-max"
                 style={{ gridTemplateColumns }}
               >
-                <div className="relative border-r border-border bg-background">
+                <div className="relative border-r border-border/50 bg-background">
                   {HOURS.map((hour) => (
                     <div
                       key={hour}
-                      className="relative border-b border-border/80 bg-muted/[0.14] pr-3 text-right text-xs font-medium text-muted-foreground"
+                      className="relative border-b border-border/45 pr-3 text-right text-xs font-medium text-muted-foreground"
                       style={{ height: `${(60 / SLOT_MINUTES) * SLOT_HEIGHT}px` }}
                     >
                       {hour > 0 ? (
-                        <div className="-translate-y-2 rounded-full bg-background/90 px-1.5 py-0.5 shadow-sm">
+                        <div className="-translate-y-2 bg-background px-1.5 py-0.5">
                           {`${String(hour).padStart(2, '0')}:00`}
                         </div>
                       ) : null}
@@ -1083,8 +1073,8 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                     data-day-index={dayIndex}
                     data-day-column={dayIndex}
                     className={cn(
-                      'relative border-r border-border/80 last:border-r-0',
-                      isToday(day) && 'bg-primary/[0.035]'
+                      'relative border-r border-border/45 last:border-r-0',
+                      isToday(day) && 'bg-muted/[0.14]'
                     )}
                     style={{ height: TOTAL_GRID_HEIGHT }}
                     onDragEnter={(event) => handleTaskDragEnter(event, dayIndex)}
@@ -1099,10 +1089,10 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                         className={cn(
                           'relative border-b transition-colors',
                           isHourSlot(slotIndex)
-                            ? 'border-border/85 bg-muted/[0.08]'
+                            ? 'border-border/45 bg-transparent'
                             : isHalfHourSlot(slotIndex)
-                              ? 'border-border/60 bg-muted/[0.03]'
-                              : 'border-dashed border-border/45'
+                              ? 'border-border/30 bg-transparent'
+                              : 'border-dashed border-border/20'
                         )}
                         style={{ height: SLOT_HEIGHT }}
                         onDoubleClick={async (event) => {
@@ -1129,11 +1119,11 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
 
                     {dragOverState?.dayIndex === dayIndex && (
                       <div
-                        className="pointer-events-none absolute left-0 right-0 z-10 border-t-2 border-primary"
+                        className="pointer-events-none absolute left-0 right-0 z-10 border-t border-foreground/50"
                         style={{ top: (dragOverState.minute / SLOT_MINUTES) * SLOT_HEIGHT }}
                       >
-                        <div className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary shadow-sm" />
-                        <div className="absolute right-2 -top-3 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                        <div className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full border border-background bg-foreground/70" />
+                        <div className="absolute right-2 -top-3 bg-background px-1.5 py-0.5 text-[10px] text-foreground">
                           {format(getDateFromMinute(day, dragOverState.minute), 'HH:mm')}
                         </div>
                       </div>
@@ -1142,8 +1132,8 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                     {dragPreview?.dayIndex === dayIndex && (
                       <div
                         className={cn(
-                          'pointer-events-none absolute left-2 right-2 z-10 rounded-2xl border-2',
-                          dragPreview.invalid ? 'border-red-500 bg-red-500/10' : 'border-primary bg-primary/10'
+                          'pointer-events-none absolute left-2 right-2 z-10 rounded-xl border',
+                          dragPreview.invalid ? 'border-red-400/60 bg-red-50/30' : 'border-foreground/20 bg-foreground/[0.04]'
                         )}
                         style={{
                           top: (dragPreview.startMinute / SLOT_MINUTES) * SLOT_HEIGHT,
@@ -1182,7 +1172,7 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                           data-block-id={block.id}
                           draggable={false}
                           className={cn(
-                            'group absolute left-2 right-2 z-20 cursor-grab select-none overflow-hidden rounded-[18px] border transition-all duration-200 hover:-translate-y-[1px] active:cursor-grabbing',
+                            'group absolute left-2 right-2 z-20 cursor-grab select-none overflow-hidden rounded-2xl border transition-colors active:cursor-grabbing',
                             isCompactBlock ? 'px-2 py-1.5' : 'p-2',
                             getBlockTone(palette, isSelected)
                           )}
@@ -1236,11 +1226,11 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                               'absolute right-2 top-2 inline-flex items-center justify-center rounded-full border transition-colors',
                               isCompactBlock ? 'h-[18px] w-[18px]' : 'h-5 w-5',
                               block.completion_status === 'completed' &&
-                                'border-emerald-200 bg-white/92 text-emerald-500 shadow-sm backdrop-blur dark:border-emerald-800/70 dark:bg-slate-950/75 dark:text-emerald-300',
+                                'border-emerald-200 bg-background text-emerald-500 dark:border-emerald-800/70 dark:bg-slate-950 dark:text-emerald-300',
                               block.completion_status === 'incomplete' &&
-                                'border-rose-200 bg-white/92 text-rose-400 shadow-sm backdrop-blur dark:border-rose-800/70 dark:bg-slate-950/75 dark:text-rose-300',
+                                'border-rose-200 bg-background text-rose-400 dark:border-rose-800/70 dark:bg-slate-950 dark:text-rose-300',
                               block.completion_status === null &&
-                                'bg-white/82 text-slate-600 shadow-sm backdrop-blur hover:bg-white dark:bg-slate-950/70 dark:text-slate-400 dark:hover:bg-slate-900'
+                                'bg-background text-slate-600 hover:bg-muted dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900'
                             )}
                             style={
                               block.completion_status === null
@@ -1283,7 +1273,7 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                               });
                             }}
                           >
-                            <span className="h-1.5 w-1.5 rounded-full border border-white/70 bg-slate-500/55 shadow-sm transition-all hover:scale-110 hover:bg-slate-600/70 dark:border-slate-200/60 dark:bg-slate-300/65" />
+                            <span className="h-1.5 w-1.5 rounded-full border border-white/70 bg-slate-400/45 transition-all hover:scale-110 hover:bg-slate-500/55 dark:border-slate-200/60 dark:bg-slate-300/45" />
                           </button>
                           <button
                             type="button"
@@ -1299,7 +1289,7 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                               });
                             }}
                           >
-                            <span className="h-1.5 w-1.5 rounded-full border border-white/70 bg-slate-500/55 shadow-sm transition-all hover:scale-110 hover:bg-slate-600/70 dark:border-slate-200/60 dark:bg-slate-300/65" />
+                            <span className="h-1.5 w-1.5 rounded-full border border-white/70 bg-slate-400/45 transition-all hover:scale-110 hover:bg-slate-500/55 dark:border-slate-200/60 dark:bg-slate-300/45" />
                           </button>
 
                           <div className={cn('flex items-start', isCompactBlock ? 'gap-1.5' : 'gap-2')}>
@@ -1323,14 +1313,14 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                                       setInlineEditValue('');
                                     }
                                   }}
-                                  className="w-full rounded-md border border-primary/30 bg-background/95 px-2 py-1 text-sm font-semibold text-foreground outline-none ring-2 ring-primary/20"
+                                  className="w-full rounded-md border border-primary/20 bg-background px-2 py-1 text-sm font-semibold text-foreground outline-none ring-1 ring-primary/10"
                                   autoFocus
                                   onMouseDown={(event) => event.stopPropagation()}
                                 />
                               ) : (
                                 <div
                                   className={cn(
-                                    'truncate font-semibold tracking-[-0.01em]',
+                                      'truncate font-medium tracking-[-0.01em]',
                                     block.completion_status === 'completed' &&
                                       'line-through decoration-2 decoration-current/70',
                                     isCompactBlock ? 'pr-5 text-xs leading-4' : 'pr-6 text-sm'
@@ -1342,7 +1332,7 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                               )}
                               <div
                                 className={cn(
-                                  'flex items-center gap-1 text-slate-500/90 dark:text-slate-400',
+                                    'flex items-center gap-1 text-slate-500/80 dark:text-slate-400',
                                   isCompactBlock ? 'mt-0.5 text-[10px] leading-4' : 'mt-1 text-[11px]'
                                 )}
                                 style={{ color: palette.mutedText }}
@@ -1361,10 +1351,10 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
                                     setProjectPickerBlockId(block.id);
                                   }}
                                   className={cn(
-                                    'mt-2 inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
-                                    project
-                                      ? 'bg-white/55 hover:bg-white/75'
-                                      : 'border-dashed bg-white/35 hover:bg-white/55'
+                                     'mt-2 inline-flex max-w-full items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                                     project
+                                       ? 'bg-background hover:bg-muted'
+                                       : 'border-dashed bg-transparent hover:bg-muted/40'
                                   )}
                                   style={{
                                     borderColor: project
@@ -1543,6 +1533,51 @@ export function TimeGridView({ mode }: TimeGridViewProps) {
           onCreateProject={handleCreateProject}
         />
       </section>
+
+      {isTaskSidebarOpen ? (
+        <div className="hidden shrink-0 lg:flex" style={{ width: taskSidebarWidth }}>
+          <button
+            type="button"
+            className={cn(
+              'group relative flex w-4 shrink-0 cursor-col-resize items-center justify-center bg-transparent',
+              isResizingTaskSidebar && 'cursor-col-resize'
+            )}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setIsResizingTaskSidebar(true);
+            }}
+            aria-label="调整任务栏宽度"
+            title="拖动调整任务栏宽度"
+          >
+            <span className="absolute inset-y-8 left-1/2 w-px -translate-x-1/2 bg-slate-200/80 dark:bg-white/10" />
+            <span className="relative inline-flex h-10 w-3 items-center justify-center rounded-full border border-slate-200 bg-white/96 transition-all group-hover:border-slate-300 group-hover:bg-white dark:border-white/10 dark:bg-slate-950 dark:group-hover:border-white/20">
+              <span className="h-4 w-[3px] rounded-full bg-slate-300 dark:bg-slate-600" />
+            </span>
+          </button>
+
+          <div className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-background">
+            <TaskList onCollapse={() => setIsTaskSidebarOpen(false)} />
+          </div>
+        </div>
+      ) : (
+        <div className="hidden h-full w-[56px] shrink-0 flex-col items-center gap-4 border-l border-border bg-background px-2 py-5 lg:flex">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-xl"
+            onClick={() => setIsTaskSidebarOpen(true)}
+            aria-label="展开任务栏"
+            title="展开任务栏"
+          >
+            <PanelLeftOpen size={17} />
+          </Button>
+          <div className="h-10 w-px bg-border/80" />
+          <div className="-rotate-90 text-[10px] font-medium tracking-[0.24em] text-muted-foreground">
+            TODAY
+          </div>
+        </div>
+      )}
     </div>
   );
 }
