@@ -8,6 +8,9 @@ pub struct Task {
     pub description: Option<String>,
     pub completed: bool,
     pub color: Option<String>,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub estimated_duration: Option<i32>,
     pub created_at: String,
     pub updated_at: String,
@@ -45,6 +48,8 @@ pub struct CreateTaskInput {
     pub title: String,
     pub description: Option<String>,
     pub color: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
     pub estimated_duration: Option<i32>,
 }
 
@@ -54,6 +59,7 @@ pub struct UpdateTaskInput {
     pub description: Option<String>,
     pub completed: Option<bool>,
     pub color: Option<String>,
+    pub tags: Option<Vec<String>>,
     pub estimated_duration: Option<i32>,
 }
 

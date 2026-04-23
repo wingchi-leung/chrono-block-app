@@ -145,7 +145,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
       }
 
       const { tags, cleanText } = parseTagsFromText(inputText);
-      const title = cleanText || inputText;
+      const title = cleanText || (tags.length > 0 ? tags[0] : inputText);
 
       setIsAdding(true);
       setNewTaskTitle('');
@@ -376,16 +376,17 @@ export function TaskList({ onCollapse }: TaskListProps) {
                   )}
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-                    {task.tags && task.tags.length > 0
+                    {task.tags?.length > 0
                       ? task.tags.map((tag) => {
                           const palette = getTagPalette(tag);
                           return (
                             <span
                               key={tag}
-                              className="inline-flex rounded-full px-2 py-0.5"
+                              className="inline-flex items-center rounded-full px-2 py-0.5 font-medium"
                               style={{
-                                backgroundColor: hexToRgba(palette.accent, 0.15),
+                                backgroundColor: hexToRgba(palette.accent, 0.18),
                                 color: palette.text,
+                                border: `1px solid ${hexToRgba(palette.accent, 0.3)}`,
                               }}
                             >
                               #{tag}
