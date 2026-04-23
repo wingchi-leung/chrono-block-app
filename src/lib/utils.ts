@@ -223,3 +223,44 @@ export function getTimeBlockPalette(seed: { id?: string | null; title?: string |
   const index = hashString(hashSeed) % TIME_BLOCK_PALETTES.length;
   return TIME_BLOCK_PALETTES[index];
 }
+
+export const TAG_PALETTES = [
+  { accent: '#4F7CFF', text: '#173272' },
+  { accent: '#FF8FA3', text: '#7B2640' },
+  { accent: '#49B6A5', text: '#0F5C53' },
+  { accent: '#FFC85C', text: '#7A4A00' },
+  { accent: '#8C6BFF', text: '#40278E' },
+  { accent: '#63C7FF', text: '#0C5B86' },
+  { accent: '#FF9E7A', text: '#7A3820' },
+  { accent: '#7CD992', text: '#1F6B34' },
+  { accent: '#5FD6C2', text: '#0F6158' },
+  { accent: '#F59E0B', text: '#78350F' },
+] as const;
+
+export function getTagPalette(tag: string) {
+  const index = hashString(tag) % TAG_PALETTES.length;
+  return TAG_PALETTES[index];
+}
+
+export function parseTagsFromText(text: string): { tags: string[]; cleanText: string } {
+  const tagRegex = /#([\p{L}\p{N}_]+)/gu;
+  const tags: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = tagRegex.exec(text)) !== null) {
+    tags.push(match[1]);
+  }
+
+  const uniqueTags = [...new Set(tags)];
+  const cleanText = text.replace(tagRegex, '').replace(/\s+/g, ' ').trim();
+
+  return { tags: uniqueTags, cleanText };
+}
+
+export function formatTitleWithTags(title: string, tags: string[]): string {
+  if (tags.length === 0) {
+    return title;
+  }
+  const tagString = tags.map((tag) => `#${tag}`).join(' ');
+  return `${title} ${tagString}`.trim();
+}

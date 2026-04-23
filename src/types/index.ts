@@ -5,6 +5,7 @@ export interface Task {
   description: string | null;
   completed: boolean;
   color: string | null;
+  tags?: string[];
   estimated_duration: number | null;
   created_at: string;
   updated_at: string;
@@ -47,6 +48,7 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   color?: string;
+  tags?: string[];
   estimated_duration?: number;
 }
 
@@ -56,6 +58,7 @@ export interface UpdateTaskInput {
   description?: string;
   completed?: boolean;
   color?: string;
+  tags?: string[];
   estimated_duration?: number;
 }
 

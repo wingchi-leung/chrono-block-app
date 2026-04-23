@@ -104,6 +104,7 @@ export const useStore = create<AppState>()(
           description: updates.description ?? undefined,
           completed: updates.completed,
           color: updates.color ?? undefined,
+          tags: updates.tags ?? undefined,
           estimated_duration: updates.estimated_duration ?? undefined,
         });
         set((state) => ({
