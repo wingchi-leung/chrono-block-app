@@ -1,8 +1,23 @@
 use tauri::State;
-use sqlx::SqlitePool;
+use sqlx::{SqlitePool, Row};
 use uuid::Uuid;
+use serde_json;
 
 use crate::models::*;
+
+fn parse_tags(tags_json: Option<&str>) -> Vec<String> {
+    tags_json
+        .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+        .unwrap_or_default()
+}
+
+fn serialize_tags(tags: &[String]) -> Option<String> {
+    if tags.is_empty() {
+        None
+    } else {
+        serde_json::to_string(tags).ok()
+    }
+}
 
 // ==================== Task CRUD ====================
 
@@ -10,25 +25,54 @@ use crate::models::*;
 pub async fn get_tasks(db: State<'_, SqlitePool>) -> Result<Vec<Task>, String> {
     let pool = db.inner();
 
-    sqlx::query_as::<_, Task>(
-        "SELECT id, title, description, completed, color, estimated_duration, created_at, updated_at FROM tasks ORDER BY created_at DESC"
+    let rows = sqlx::query(
+        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks ORDER BY created_at DESC"
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| format!("获取任务失败: {}", e))
+    .map_err(|e| format!("获取任务失败: {}", e))?;
+
+    let tasks: Vec<Task> = rows
+        .into_iter()
+        .map(|row| Task {
+            id: row.get("id"),
+            title: row.get("title"),
+            description: row.get("description"),
+            completed: row.get::<i64, _>("completed") != 0,
+            color: row.get("color"),
+            tags: parse_tags(row.get::<Option<&str>, _>("tags")),
+            estimated_duration: row.get("estimated_duration"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+        .collect();
+
+    Ok(tasks)
 }
 
 #[tauri::command]
 pub async fn get_task(db: State<'_, SqlitePool>, id: String) -> Result<Option<Task>, String> {
     let pool = db.inner();
 
-    sqlx::query_as::<_, Task>(
-        "SELECT id, title, description, completed, color, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
+    let row = sqlx::query(
+        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
     )
     .bind(&id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| format!("获取任务失败: {}", e))
+    .map_err(|e| format!("获取任务失败: {}", e))?;
+
+    Ok(row.map(|row| Task {
+        id: row.get("id"),
+        title: row.get("title"),
+        description: row.get("description"),
+        completed: row.get::<i64, _>("completed") != 0,
+        color: row.get("color"),
+        tags: parse_tags(row.get::<Option<&str>, _>("tags")),
+        estimated_duration: row.get("estimated_duration"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }))
 }
 
 #[tauri::command]
@@ -37,14 +81,16 @@ pub async fn create_task(db: State<'_, SqlitePool>, input: CreateTaskInput) -> R
 
     let id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
+    let tags_json = serialize_tags(&input.tags);
 
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, completed, color, estimated_duration, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, completed, color, tags, estimated_duration, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(&input.title)
     .bind(&input.description)
     .bind(&input.color)
+    .bind(&tags_json)
     .bind(&input.estimated_duration)
     .bind(&now)
     .bind(&now)
@@ -58,6 +104,7 @@ pub async fn create_task(db: State<'_, SqlitePool>, input: CreateTaskInput) -> R
         description: input.description,
         completed: false,
         color: input.color,
+        tags: input.tags,
         estimated_duration: input.estimated_duration,
         created_at: now.clone(),
         updated_at: now,
@@ -68,8 +115,8 @@ pub async fn create_task(db: State<'_, SqlitePool>, input: CreateTaskInput) -> R
 pub async fn update_task(db: State<'_, SqlitePool>, id: String, input: UpdateTaskInput) -> Result<Task, String> {
     let pool = db.inner();
 
-    let existing = sqlx::query_as::<_, Task>(
-        "SELECT id, title, description, completed, color, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
+    let existing_row = sqlx::query(
+        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
     )
     .bind(&id)
     .fetch_optional(pool)
@@ -77,25 +124,31 @@ pub async fn update_task(db: State<'_, SqlitePool>, id: String, input: UpdateTas
     .map_err(|e| format!("获取任务失败: {}", e))?
     .ok_or_else(|| "任务不存在".to_string())?;
 
+    let existing_tags = parse_tags(existing_row.get::<Option<&str>, _>("tags"));
+    let new_tags = input.tags.unwrap_or(existing_tags.clone());
+    let tags_json = serialize_tags(&new_tags);
+
     let now = chrono::Utc::now().to_rfc3339();
     let updated = Task {
         id: id.clone(),
-        title: input.title.unwrap_or(existing.title),
-        description: input.description.or(existing.description),
-        completed: input.completed.unwrap_or(existing.completed),
-        color: input.color.or(existing.color),
-        estimated_duration: input.estimated_duration.or(existing.estimated_duration),
-        created_at: existing.created_at,
-        updated_at: now,
+        title: input.title.unwrap_or_else(|| existing_row.get("title")),
+        description: input.description.or_else(|| existing_row.get("description")),
+        completed: input.completed.unwrap_or_else(|| existing_row.get::<i64, _>("completed") != 0),
+        color: input.color.or_else(|| existing_row.get("color")),
+        tags: new_tags,
+        estimated_duration: input.estimated_duration.or_else(|| existing_row.get("estimated_duration")),
+        created_at: existing_row.get("created_at"),
+        updated_at: now.clone(),
     };
 
     sqlx::query(
-        "UPDATE tasks SET title = ?, description = ?, completed = ?, color = ?, estimated_duration = ?, updated_at = ? WHERE id = ?"
+        "UPDATE tasks SET title = ?, description = ?, completed = ?, color = ?, tags = ?, estimated_duration = ?, updated_at = ? WHERE id = ?"
     )
     .bind(&updated.title)
     .bind(&updated.description)
-    .bind(&updated.completed)
+    .bind(updated.completed as i64)
     .bind(&updated.color)
+    .bind(&tags_json)
     .bind(&updated.estimated_duration)
     .bind(&updated.updated_at)
     .bind(&id)

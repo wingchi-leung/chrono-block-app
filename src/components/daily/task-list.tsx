@@ -8,11 +8,14 @@ import {
   Plus,
   Sparkles,
   X,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useStore } from '@/store';
 import type { Task, TimeBlock } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, parseTagsFromText, formatTitleWithTags, getTagPalette, hexToRgba } from '@/lib/utils';
 import { TaskProgressPie } from './task-progress-pie';
 
 type TaskListProps = {
@@ -112,9 +115,19 @@ export function TaskList({ onCollapse }: TaskListProps) {
     [taskMeta]
   );
 
+  const completedTasks = useMemo(
+    () =>
+      taskMeta
+        .filter(({ task }) => task.completed)
+        .sort((a, b) => new Date(b.task.updated_at).getTime() - new Date(a.task.updated_at).getTime()),
+    [taskMeta]
+  );
+
   const unscheduledTasks = useMemo(() => {
     return plannerTasks.filter(({ isScheduledOnSelectedDate }) => !isScheduledOnSelectedDate);
   }, [plannerTasks]);
+
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
 
   const selectedDateLabel = useMemo(() => formatSelectedDateLabel(selectedDate), [selectedDate]);
 
@@ -126,10 +139,13 @@ export function TaskList({ onCollapse }: TaskListProps) {
         return;
       }
 
-      const title = newTaskTitle.trim();
-      if (!title) {
+      const inputText = newTaskTitle.trim();
+      if (!inputText) {
         return;
       }
+
+      const { tags, cleanText } = parseTagsFromText(inputText);
+      const title = cleanText || (tags.length > 0 ? tags[0] : inputText);
 
       setIsAdding(true);
       setNewTaskTitle('');
@@ -137,11 +153,12 @@ export function TaskList({ onCollapse }: TaskListProps) {
       try {
         await addTask({
           title,
+          tags: tags.length > 0 ? tags : undefined,
           estimated_duration: quickDuration,
         });
         inputRef.current?.focus();
       } catch (error) {
-        setNewTaskTitle(title);
+        setNewTaskTitle(inputText);
       } finally {
         window.setTimeout(() => {
           setIsAdding(false);
@@ -153,7 +170,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
   const handleStartEditing = useCallback((task: Task) => {
     setEditingTaskId(task.id);
-    setEditValue(task.title);
+    setEditValue(formatTitleWithTags(task.title, task.tags || []));
 
     window.setTimeout(() => {
       editInputRef.current?.focus();
@@ -163,14 +180,17 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
   const handleSaveEdit = useCallback(
     async (taskId: string) => {
-      const title = editValue.trim();
+      const inputText = editValue.trim();
       setEditingTaskId(null);
 
-      if (!title) {
+      if (!inputText) {
         return;
       }
 
-      await updateTask(taskId, { title });
+      const { tags, cleanText } = parseTagsFromText(inputText);
+      const title = cleanText || inputText;
+
+      await updateTask(taskId, { title, tags });
     },
     [editValue, updateTask]
   );
@@ -356,14 +376,24 @@ export function TaskList({ onCollapse }: TaskListProps) {
                   )}
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-                    {task.color ? (
-                      <span
-                        className="inline-flex rounded-full px-2 py-0.5"
-                        style={{ backgroundColor: `${task.color}22`, color: task.color }}
-                      >
-                        标签
-                      </span>
-                    ) : null}
+                    {task.tags?.length > 0
+                      ? task.tags.map((tag) => {
+                          const palette = getTagPalette(tag);
+                          return (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full px-2 py-0.5 font-medium"
+                              style={{
+                                backgroundColor: hexToRgba(palette.accent, 0.18),
+                                color: palette.text,
+                                border: `1px solid ${hexToRgba(palette.accent, 0.3)}`,
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          );
+                        })
+                      : null}
                     {blockCount > 0 && !isScheduledOnSelectedDate ? (
                       <span className="inline-flex items-center gap-1 text-muted-foreground">
                         <Calendar size={10} />
@@ -472,8 +502,41 @@ export function TaskList({ onCollapse }: TaskListProps) {
     );
   };
 
+  const renderCompletedTasks = () => {
+    if (completedTasks.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="space-y-2 border-t border-border/60 pt-5">
+        <button
+          type="button"
+          onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <History size={14} className="text-muted-foreground" />
+            <h4 className="text-sm font-semibold text-foreground">历史任务</h4>
+            <span className="text-xs text-muted-foreground">{completedTasks.length}</span>
+          </div>
+          {showCompletedTasks ? (
+            <ChevronUp size={14} className="text-muted-foreground" />
+          ) : (
+            <ChevronDown size={14} className="text-muted-foreground" />
+          )}
+        </button>
+
+        {showCompletedTasks ? (
+          <div className="mt-2">
+            {completedTasks.map((task) => renderTaskCard(task))}
+          </div>
+        ) : null}
+      </section>
+    );
+  };
+
   const renderTaskSections = () => {
-    if (plannerTasks.length === 0) {
+    if (plannerTasks.length === 0 && completedTasks.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -486,13 +549,12 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
     return (
       <div className="space-y-7">
-        {renderTaskSection(
-          '任务',
-          unscheduledTasks,
-          {
-            emptyText: '当前没有待办任务',
-          }
-        )}
+        {plannerTasks.length > 0
+          ? renderTaskSection('任务', unscheduledTasks, {
+              emptyText: '当前没有待办任务',
+            })
+          : null}
+        {renderCompletedTasks()}
       </div>
     );
   };
