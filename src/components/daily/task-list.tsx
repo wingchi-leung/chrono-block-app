@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { useStore } from '@/store';
 import type { Task, TimeBlock } from '@/types';
 import { cn } from '@/lib/utils';
+import { TaskProgressPie } from './task-progress-pie';
 
 type TaskListProps = {
   onCollapse?: () => void;
@@ -565,6 +566,8 @@ export function TaskList({ onCollapse }: TaskListProps) {
       <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4">
         {renderTaskSections()}
       </div>
+
+      <TaskProgressPie tasks={tasks} dimension="all" />
     </div>
   );
 }
