@@ -1,5 +1,5 @@
 pub const MIGRATIONS: &str = r#"
--- 创建任务表
+-- 创建任务表 (原始结构，新字段在 ensure_project_schema 中动态添加)
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY NOT NULL,
     title TEXT NOT NULL,
@@ -7,14 +7,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed INTEGER NOT NULL DEFAULT 0,
     color TEXT,
     estimated_duration INTEGER,
-    deleted INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
--- 为已存在的数据库添加新列 (如果不存在)
-PRAGMA table_info(tasks);
 
 -- 创建时间块表
 CREATE TABLE IF NOT EXISTS time_blocks (
@@ -34,7 +29,6 @@ CREATE TABLE IF NOT EXISTS time_blocks (
 
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);
-CREATE INDEX IF NOT EXISTS idx_tasks_deleted ON tasks(deleted);
 CREATE INDEX IF NOT EXISTS idx_time_blocks_start ON time_blocks(start_time);
 CREATE INDEX IF NOT EXISTS idx_time_blocks_end ON time_blocks(end_time);
 CREATE INDEX IF NOT EXISTS idx_time_blocks_task_id ON time_blocks(task_id);
