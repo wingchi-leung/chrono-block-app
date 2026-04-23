@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addMinutes, format, isSameDay, setHours, setMinutes } from 'date-fns';
+import { addMinutes, format, isSameDay, setHours, setMinutes, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import {
   Calendar,
   Check,
@@ -8,9 +8,11 @@ import {
   Plus,
   Sparkles,
   X,
-  History,
   ChevronDown,
-  ChevronUp,
+  Sun,
+  CalendarDays,
+  Tag,
+  CheckCircle2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useStore } from '@/store';
@@ -22,10 +24,13 @@ type TaskListProps = {
   onCollapse?: () => void;
 };
 
+type TaskNavType = 'today' | 'week' | 'tags' | 'completed';
+
 type TaskMeta = {
   task: Task;
   blockCount: number;
   isScheduledOnSelectedDate: boolean;
+  isScheduledThisWeek: boolean;
   latestBlockEnd: Date | null;
 };
 
@@ -49,6 +54,10 @@ const sortPlannerTasks = (left: TaskMeta, right: TaskMeta) => {
   return new Date(right.task.created_at).getTime() - new Date(left.task.created_at).getTime();
 };
 
+const sortCompletedTasks = (a: TaskMeta, b: TaskMeta) => {
+  return new Date(b.task.updated_at).getTime() - new Date(a.task.updated_at).getTime();
+};
+
 export function TaskList({ onCollapse }: TaskListProps) {
   const {
     tasks,
@@ -66,6 +75,8 @@ export function TaskList({ onCollapse }: TaskListProps) {
     setDragPointer,
   } = useStore();
 
+  const [activeNav, setActiveNav] = useState<TaskNavType>('today');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [quickDuration, setQuickDuration] = useState(30);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -77,6 +88,10 @@ export function TaskList({ onCollapse }: TaskListProps) {
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
+
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
 
   const taskMeta = useMemo(() => {
     const blocksByTask = new Map<string, TimeBlock[]>();
@@ -96,6 +111,9 @@ export function TaskList({ onCollapse }: TaskListProps) {
       const selectedDayBlocks = relatedBlocks.filter((block) =>
         isSameDay(new Date(block.start_time), selectedDate)
       );
+      const thisWeekBlocks = relatedBlocks.filter((block) =>
+        isWithinInterval(new Date(block.start_time), { start: weekStart, end: weekEnd })
+      );
       const latestBlockEnd =
         selectedDayBlocks
           .map((block) => new Date(block.end_time))
@@ -105,31 +123,71 @@ export function TaskList({ onCollapse }: TaskListProps) {
         task,
         blockCount: relatedBlocks.length,
         isScheduledOnSelectedDate: selectedDayBlocks.length > 0,
+        isScheduledThisWeek: thisWeekBlocks.length > 0,
         latestBlockEnd,
       } satisfies TaskMeta;
     });
-  }, [selectedDate, tasks, timeBlocks]);
+  }, [selectedDate, tasks, timeBlocks, weekStart, weekEnd]);
 
-  const plannerTasks = useMemo(
-    () => taskMeta.filter(({ task }) => !task.completed).sort(sortPlannerTasks),
-    [taskMeta]
-  );
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tasks.forEach((task) => {
+      task.tags?.forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort();
+  }, [tasks]);
 
-  const completedTasks = useMemo(
-    () =>
-      taskMeta
-        .filter(({ task }) => task.completed)
-        .sort((a, b) => new Date(b.task.updated_at).getTime() - new Date(a.task.updated_at).getTime()),
-    [taskMeta]
-  );
+  const navCounts = useMemo(() => {
+    const todayCount = taskMeta.filter((m) => !m.task.completed).length;
+    const weekCount = taskMeta.filter((m) => !m.task.completed && (m.isScheduledThisWeek || !m.isScheduledOnSelectedDate)).length;
+    const completedCount = taskMeta.filter((m) => m.task.completed).length;
 
-  const unscheduledTasks = useMemo(() => {
-    return plannerTasks.filter(({ isScheduledOnSelectedDate }) => !isScheduledOnSelectedDate);
-  }, [plannerTasks]);
+    return {
+      today: todayCount,
+      week: Math.max(weekCount, todayCount),
+      tags: allTags.length,
+      completed: completedCount,
+    };
+  }, [taskMeta, allTags.length]);
 
-  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+  const filteredTasks = useMemo(() => {
+    switch (activeNav) {
+      case 'today':
+        return taskMeta.filter((m) => !m.task.completed).sort(sortPlannerTasks);
+      case 'week':
+        return taskMeta.filter((m) => !m.task.completed).sort(sortPlannerTasks);
+      case 'tags':
+        if (selectedTag) {
+          return taskMeta
+            .filter((m) => !m.task.completed && m.task.tags?.includes(selectedTag))
+            .sort(sortPlannerTasks);
+        }
+        return [];
+      case 'completed':
+        return taskMeta.filter((m) => m.task.completed).sort(sortCompletedTasks);
+      default:
+        return [];
+    }
+  }, [activeNav, selectedTag, taskMeta]);
+
+
 
   const selectedDateLabel = useMemo(() => formatSelectedDateLabel(selectedDate), [selectedDate]);
+
+  const getNavTitle = () => {
+    switch (activeNav) {
+      case 'today':
+        return '今天';
+      case 'week':
+        return '本周';
+      case 'tags':
+        return selectedTag ? `#${selectedTag}` : '标签';
+      case 'completed':
+        return '已完成';
+      default:
+        return '今天';
+    }
+  };
 
   const handleAddTask = useCallback(
     async (event?: React.FormEvent | React.KeyboardEvent) => {
@@ -244,7 +302,6 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
   const findNextAvailableStart = useCallback(
     (duration: number) => {
-      const now = new Date();
       const sameDayAsToday = isSameDay(selectedDate, now);
       let cursor = sameDayAsToday ? new Date(now) : setMinutes(setHours(new Date(selectedDate), 9), 0);
       cursor = setMinutes(cursor, Math.ceil(cursor.getMinutes() / 15) * 15);
@@ -265,7 +322,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
       return null;
     },
-    [checkTimeConflict, selectedDate]
+    [checkTimeConflict, selectedDate, now]
   );
 
   const handleQuickSchedule = useCallback(
@@ -376,8 +433,8 @@ export function TaskList({ onCollapse }: TaskListProps) {
                   )}
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
-                    {task.tags?.length > 0
-                      ? task.tags.map((tag) => {
+                    {(task.tags ?? []).length > 0
+                      ? (task.tags ?? []).map((tag) => {
                           const palette = getTagPalette(tag);
                           return (
                             <span
@@ -502,41 +559,77 @@ export function TaskList({ onCollapse }: TaskListProps) {
     );
   };
 
-  const renderCompletedTasks = () => {
-    if (completedTasks.length === 0) {
-      return null;
+  const renderTaskSections = () => {
+    if (activeNav === 'completed') {
+      if (filteredTasks.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <CheckCircle2 size={20} />
+            </div>
+            <p className="text-sm font-medium">暂无已完成任务</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-7">
+          {renderTaskSection('已完成', filteredTasks, {
+            emptyText: '暂无已完成任务',
+          })}
+        </div>
+      );
     }
 
-    return (
-      <section className="space-y-2 border-t border-border/60 pt-5">
-        <button
-          type="button"
-          onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <div className="flex items-center gap-2">
-            <History size={14} className="text-muted-foreground" />
-            <h4 className="text-sm font-semibold text-foreground">历史任务</h4>
-            <span className="text-xs text-muted-foreground">{completedTasks.length}</span>
+    if (activeNav === 'tags' && !selectedTag) {
+      if (allTags.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Tag size={20} />
+            </div>
+            <p className="text-sm font-medium">暂无标签</p>
+            <p className="text-xs text-muted-foreground">添加任务时使用 #标签名 即可创建标签</p>
           </div>
-          {showCompletedTasks ? (
-            <ChevronUp size={14} className="text-muted-foreground" />
-          ) : (
-            <ChevronDown size={14} className="text-muted-foreground" />
-          )}
-        </button>
+        );
+      }
 
-        {showCompletedTasks ? (
-          <div className="mt-2">
-            {completedTasks.map((task) => renderTaskCard(task))}
-          </div>
-        ) : null}
-      </section>
-    );
-  };
+      return (
+        <div className="space-y-2">
+          {allTags.map((tag) => {
+            const palette = getTagPalette(tag);
+            const tagTaskCount = taskMeta.filter(
+              (m) => !m.task.completed && m.task.tags?.includes(tag)
+            ).length;
 
-  const renderTaskSections = () => {
-    if (plannerTasks.length === 0 && completedTasks.length === 0) {
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSelectedTag(tag)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center rounded-full px-2 py-0.5 text-sm font-medium"
+                    style={{
+                      backgroundColor: hexToRgba(palette.accent, 0.18),
+                      color: palette.text,
+                      border: `1px solid ${hexToRgba(palette.accent, 0.3)}`,
+                    }}
+                  >
+                    #{tag}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">{tagTaskCount}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (filteredTasks.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -547,89 +640,168 @@ export function TaskList({ onCollapse }: TaskListProps) {
       );
     }
 
+    const unscheduledInFiltered = filteredTasks.filter(({ isScheduledOnSelectedDate }) => !isScheduledOnSelectedDate);
+
     return (
       <div className="space-y-7">
-        {plannerTasks.length > 0
-          ? renderTaskSection('任务', unscheduledTasks, {
-              emptyText: '当前没有待办任务',
-            })
-          : null}
-        {renderCompletedTasks()}
+        {renderTaskSection('任务', unscheduledInFiltered.length > 0 ? unscheduledInFiltered : filteredTasks, {
+          emptyText: activeNav === 'tags' ? '该标签下暂无任务' : '当前没有待办任务',
+        })}
       </div>
     );
   };
 
+  const NavItem = ({
+    navType,
+    icon: Icon,
+    label,
+    count,
+  }: {
+    navType: TaskNavType;
+    icon: React.ElementType;
+    label: string;
+    count: number;
+  }) => {
+    const isActive = activeNav === navType;
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setActiveNav(navType);
+          if (navType !== 'tags') {
+            setSelectedTag(null);
+          }
+        }}
+        className={cn(
+          'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+          isActive
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+          <span className={cn('font-medium', isActive && 'text-primary')}>{label}</span>
+        </div>
+        {count > 0 && (
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-xs font-medium',
+              isActive
+                ? 'bg-primary/20 text-primary'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
-      <div className="border-b border-border/60 px-5 pb-4 pt-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-[28px] font-semibold tracking-tight text-foreground">今天</h3>
-              <span className="text-xs text-muted-foreground">{selectedDateLabel}</span>
+    <div className="flex h-full overflow-hidden bg-background">
+      <div className="flex w-48 flex-col border-r border-border/60 bg-muted/20">
+        <div className="flex-1 space-y-1 px-3 py-4">
+          <NavItem navType="today" icon={Sun} label="今天" count={navCounts.today} />
+          <NavItem navType="week" icon={CalendarDays} label="本周" count={navCounts.week} />
+          <NavItem navType="tags" icon={Tag} label="标签" count={navCounts.tags} />
+          <NavItem navType="completed" icon={CheckCircle2} label="已完成" count={navCounts.completed} />
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="border-b border-border/60 px-5 pb-4 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {activeNav === 'tags' && selectedTag && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTag(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="返回标签列表"
+                >
+                  <ChevronDown size={16} className="-rotate-90" />
+                </button>
+              )}
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-[28px] font-semibold tracking-tight text-foreground">
+                    {getNavTitle()}
+                  </h3>
+                  {activeNav === 'today' && (
+                    <span className="text-xs text-muted-foreground">{selectedDateLabel}</span>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {onCollapse ? (
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="收起任务栏"
+                title="收起任务栏"
+              >
+                <PanelLeftClose size={16} />
+              </button>
+            ) : null}
           </div>
 
-          {onCollapse ? (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="收起任务栏"
-              title="收起任务栏"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          ) : null}
+          {activeNav !== 'completed' && (
+            <form onSubmit={handleAddTask} className="mt-4 space-y-2">
+              <div className="relative">
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="添加任务"
+                  value={newTaskTitle}
+                  onChange={(event) => setNewTaskTitle(event.target.value)}
+                  className="h-12 rounded-xl border-transparent bg-muted/35 pl-11 pr-16 shadow-none focus-visible:border-border focus-visible:bg-background focus-visible:ring-0"
+                />
+                <Plus size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <button
+                  type="submit"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="添加任务"
+                >
+                  添加
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span>默认时长</span>
+                {QUICK_DURATION_OPTIONS.map((duration) => (
+                  <button
+                    key={`quick-duration-${duration}`}
+                    type="button"
+                    onClick={() => setQuickDuration(duration)}
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 transition-colors',
+                      quickDuration === duration
+                        ? 'bg-foreground text-background'
+                        : 'hover:bg-muted hover:text-foreground'
+                    )}
+                    aria-label={`将新任务默认时长设为 ${duration} 分钟`}
+                  >
+                    {duration}m
+                  </button>
+                ))}
+              </div>
+            </form>
+          )}
         </div>
 
-        <form onSubmit={handleAddTask} className="mt-4 space-y-2">
-          <div className="relative">
-            <Input
-              ref={inputRef}
-              type="text"
-              placeholder="添加任务"
-              value={newTaskTitle}
-              onChange={(event) => setNewTaskTitle(event.target.value)}
-              className="h-12 rounded-xl border-transparent bg-muted/35 pl-11 pr-16 shadow-none focus-visible:border-border focus-visible:bg-background focus-visible:ring-0"
-            />
-            <Plus size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <button
-              type="submit"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="添加任务"
-            >
-              添加
-            </button>
-          </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4">
+          {renderTaskSections()}
+        </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <span>默认时长</span>
-            {QUICK_DURATION_OPTIONS.map((duration) => (
-              <button
-                key={`quick-duration-${duration}`}
-                type="button"
-                onClick={() => setQuickDuration(duration)}
-                className={cn(
-                  'rounded-md px-1.5 py-0.5 transition-colors',
-                  quickDuration === duration
-                    ? 'bg-foreground text-background'
-                    : 'hover:bg-muted hover:text-foreground'
-                )}
-                aria-label={`将新任务默认时长设为 ${duration} 分钟`}
-              >
-                {duration}m
-              </button>
-            ))}
-          </div>
-        </form>
+        {activeNav !== 'completed' && activeNav !== 'tags' && (
+          <TaskProgressPie tasks={tasks} dimension="all" />
+        )}
       </div>
-
-      <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4">
-        {renderTaskSections()}
-      </div>
-
-      <TaskProgressPie tasks={tasks} dimension="all" />
     </div>
   );
 }
