@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
 import type { Task } from '@/types';
+import { cn } from '@/lib/utils';
 
 export type TaskProgressDimension = 'all' | 'today' | 'week' | 'byColor';
 
@@ -22,43 +23,6 @@ const COLORS = {
   incomplete: 'hsl(210 40% 96.1%)',
   completedDark: 'hsl(217.2 91.2% 59.8%)',
   incompleteDark: 'hsl(217.2 32.6% 17.5%)',
-};
-
-const RADIAN = Math.PI / 180;
-
-const renderCustomizedLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-}: {
-  cx: number;
-  cy: number;
-  midAngle: number;
-  innerRadius: number;
-  outerRadius: number;
-  percent: number;
-}) => {
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-  if (percent < 0.1) return null;
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor="middle"
-      dominantBaseline="central"
-      className="text-xs font-medium"
-    >
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  );
 };
 
 const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }> }) => {
@@ -139,7 +103,7 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
       {isExpanded ? (
         <div className="px-5 pb-4">
           <div className="flex items-center justify-between">
-            <div className="h-20 w-20">
+            <div className="relative h-20 w-20">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -147,9 +111,8 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={renderCustomizedLabel}
                     outerRadius={35}
-                    innerRadius={20}
+                    innerRadius={24}
                     paddingAngle={1}
                     dataKey="value"
                     strokeWidth={0}
@@ -161,6 +124,17 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
                   <Tooltip content={<CustomTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
+
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span
+                  className={cn(
+                    'text-sm font-bold',
+                    completionRate >= 80 ? 'text-emerald-500' : completionRate >= 50 ? 'text-foreground' : 'text-muted-foreground'
+                  )}
+                >
+                  {completionRate}%
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 text-xs">
