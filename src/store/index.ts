@@ -14,34 +14,33 @@ import type {
 import { areIntervalsOverlapping, addMinutes } from 'date-fns';
 
 interface AppState {
-  // 视图
   currentView: ViewType;
   setCurrentView: (view: ViewType) => void;
 
-  // 主题
   theme: Theme;
   setTheme: (theme: Theme) => void;
 
-  // 选中日期
   selectedDate: Date;
   setSelectedDate: (date: Date) => void;
 
-  // 任务
   tasks: Task[];
+  deletedTasks: Task[];
   setTasks: (tasks: Task[]) => void;
+  setDeletedTasks: (tasks: Task[]) => void;
   loadTasks: () => Promise<void>;
+  loadDeletedTasks: () => Promise<void>;
   addTask: (input: CreateTaskInput) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
+  softDeleteTask: (id: string) => Promise<void>;
+  restoreTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   toggleTaskCompletion: (id: string) => Promise<void>;
 
-  // 项目
   projects: Project[];
   setProjects: (projects: Project[]) => void;
   loadProjects: () => Promise<void>;
   addProject: (input: CreateProjectInput) => Promise<Project>;
 
-  // 时间块
   timeBlocks: TimeBlock[];
   setTimeBlocks: (blocks: TimeBlock[]) => void;
   loadTimeBlocks: (startDate?: string, endDate?: string) => Promise<void>;
@@ -55,7 +54,6 @@ interface AppState {
     status: 'completed' | 'incomplete' | null
   ) => Promise<void>;
 
-  // UI 状态
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   error: string | null;
@@ -69,26 +67,33 @@ interface AppState {
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // 视图
       currentView: 'day',
       setCurrentView: (currentView) => set({ currentView }),
 
-      // 主题
       theme: 'system',
       setTheme: (theme) => set({ theme }),
 
-      // 选中日期
       selectedDate: new Date(),
       setSelectedDate: (selectedDate) => set({ selectedDate }),
 
-      // 任务
       tasks: [],
+      deletedTasks: [],
       setTasks: (tasks) => set({ tasks }),
+      setDeletedTasks: (deletedTasks) => set({ deletedTasks }),
       loadTasks: async () => {
         try {
           set({ isLoading: true, error: null });
           const tasks = await taskApi.getAll();
           set({ tasks, isLoading: false });
+        } catch (error) {
+          set({ error: (error as Error).message, isLoading: false });
+        }
+      },
+      loadDeletedTasks: async () => {
+        try {
+          set({ isLoading: true, error: null });
+          const deletedTasks = await taskApi.getDeleted();
+          set({ deletedTasks, isLoading: false });
         } catch (error) {
           set({ error: (error as Error).message, isLoading: false });
         }
@@ -111,11 +116,63 @@ export const useStore = create<AppState>()(
           tasks: state.tasks.map((t) => (t.id === id ? updated : t)),
         }));
       },
+      softDeleteTask: async (id) => {
+        const task = get().tasks.find((t) => t.id === id);
+        if (task) {
+          set((state) => ({
+            tasks: state.tasks.filter((t) => t.id !== id),
+            deletedTasks: [...state.deletedTasks, { ...task, deleted: true, deleted_at: new Date().toISOString() }],
+          }));
+        }
+        try {
+          await taskApi.softDelete(id);
+        } catch (error) {
+          if (task) {
+            set((state) => ({
+              tasks: [...state.tasks, task],
+              deletedTasks: state.deletedTasks.filter((t) => t.id !== id),
+            }));
+          }
+          throw error;
+        }
+      },
+      restoreTask: async (id) => {
+        const task = get().deletedTasks.find((t) => t.id === id);
+        if (task) {
+          set((state) => ({
+            deletedTasks: state.deletedTasks.filter((t) => t.id !== id),
+            tasks: [...state.tasks, { ...task, deleted: false, deleted_at: null }],
+          }));
+        }
+        try {
+          await taskApi.restore(id);
+        } catch (error) {
+          if (task) {
+            set((state) => ({
+              deletedTasks: [...state.deletedTasks, task],
+              tasks: state.tasks.filter((t) => t.id !== id),
+            }));
+          }
+          throw error;
+        }
+      },
       deleteTask: async (id) => {
-        await taskApi.delete(id);
-        set((state) => ({
-          tasks: state.tasks.filter((t) => t.id !== id),
-        }));
+        const task = get().tasks.find((t) => t.id === id);
+        if (task) {
+          set((state) => ({
+            tasks: state.tasks.filter((t) => t.id !== id),
+          }));
+        }
+        try {
+          await taskApi.softDelete(id);
+        } catch (error) {
+          if (task) {
+            set((state) => ({
+              tasks: [...state.tasks, task],
+            }));
+          }
+          throw error;
+        }
       },
       toggleTaskCompletion: async (id) => {
         const task = get().tasks.find((t) => t.id === id);
@@ -123,7 +180,6 @@ export const useStore = create<AppState>()(
 
         const newCompletedStatus = !task.completed;
 
-        // Optimistic update
         set((state) => ({
           tasks: state.tasks.map((t) =>
             t.id === id ? { ...t, completed: newCompletedStatus } : t
@@ -138,7 +194,6 @@ export const useStore = create<AppState>()(
             tasks: state.tasks.map((t) => (t.id === id ? updated : t)),
           }));
         } catch (error) {
-          // Rollback on error
           set((state) => ({
             tasks: state.tasks.map((t) =>
               t.id === id ? { ...t, completed: task.completed } : t
@@ -148,7 +203,6 @@ export const useStore = create<AppState>()(
         }
       },
 
-      // 项目
       projects: [],
       setProjects: (projects) => set({ projects }),
       loadProjects: async () => {
@@ -166,7 +220,6 @@ export const useStore = create<AppState>()(
         return project;
       },
 
-      // 时间块
       timeBlocks: [],
       setTimeBlocks: (timeBlocks) => set({ timeBlocks }),
       loadTimeBlocks: async (startDate, endDate) => {
@@ -236,13 +289,11 @@ export const useStore = create<AppState>()(
         const duration = task.estimated_duration || 30;
         const end = addMinutes(start, duration);
 
-        // Check for conflicts
         if (checkTimeConflict(start, end)) {
           return null;
         }
 
         try {
-          // Create time block from task
           const newBlock = await timeBlockApi.create({
             title: task.title,
             start_time: start.toISOString(),
@@ -294,7 +345,6 @@ export const useStore = create<AppState>()(
         }
       },
 
-      // UI 状态
       isLoading: false,
       setIsLoading: (isLoading) => set({ isLoading }),
       error: null,

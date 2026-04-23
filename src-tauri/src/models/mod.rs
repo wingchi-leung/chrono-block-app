@@ -12,6 +12,9 @@ pub struct Task {
     #[serde(default)]
     pub tags: Vec<String>,
     pub estimated_duration: Option<i32>,
+    #[sqlx(default)]
+    pub deleted: bool,
+    pub deleted_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

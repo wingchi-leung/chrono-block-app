@@ -13,8 +13,19 @@ import {
   CalendarDays,
   Tag,
   CheckCircle2,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import type { Task, TimeBlock } from '@/types';
 import { cn, parseTagsFromText, formatTitleWithTags, getTagPalette, hexToRgba } from '@/lib/utils';
@@ -24,7 +35,7 @@ type TaskListProps = {
   onCollapse?: () => void;
 };
 
-type TaskNavType = 'today' | 'week' | 'tags' | 'completed';
+type TaskNavType = 'today' | 'week' | 'tags' | 'completed' | 'deleted';
 
 type TaskMeta = {
   task: Task;
@@ -61,12 +72,15 @@ const sortCompletedTasks = (a: TaskMeta, b: TaskMeta) => {
 export function TaskList({ onCollapse }: TaskListProps) {
   const {
     tasks,
+    deletedTasks,
     timeBlocks,
     selectedDate,
     loadTasks,
+    loadDeletedTasks,
     addTask,
     updateTask,
-    deleteTask,
+    softDeleteTask,
+    restoreTask,
     toggleTaskCompletion,
     convertTaskToTimeBlock,
     checkTimeConflict,
@@ -85,9 +99,18 @@ export function TaskList({ onCollapse }: TaskListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
+
+  useEffect(() => {
+    if (activeNav === 'deleted') {
+      void loadDeletedTasks();
+    }
+  }, [activeNav, loadDeletedTasks]);
 
   const now = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -129,6 +152,16 @@ export function TaskList({ onCollapse }: TaskListProps) {
     });
   }, [selectedDate, tasks, timeBlocks, weekStart, weekEnd]);
 
+  const deletedTaskMeta = useMemo(() => {
+    return deletedTasks.map((task) => ({
+      task,
+      blockCount: 0,
+      isScheduledOnSelectedDate: false,
+      isScheduledThisWeek: false,
+      latestBlockEnd: null,
+    } satisfies TaskMeta));
+  }, [deletedTasks]);
+
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     tasks.forEach((task) => {
@@ -141,16 +174,22 @@ export function TaskList({ onCollapse }: TaskListProps) {
     const todayCount = taskMeta.filter((m) => !m.task.completed).length;
     const weekCount = taskMeta.filter((m) => !m.task.completed && (m.isScheduledThisWeek || !m.isScheduledOnSelectedDate)).length;
     const completedCount = taskMeta.filter((m) => m.task.completed).length;
+    const deletedCount = deletedTasks.length;
 
     return {
       today: todayCount,
       week: Math.max(weekCount, todayCount),
       tags: allTags.length,
       completed: completedCount,
+      deleted: deletedCount,
     };
-  }, [taskMeta, allTags.length]);
+  }, [taskMeta, allTags.length, deletedTasks.length]);
 
   const filteredTasks = useMemo(() => {
+    if (activeNav === 'deleted') {
+      return deletedTaskMeta;
+    }
+
     switch (activeNav) {
       case 'today':
         return taskMeta.filter((m) => !m.task.completed).sort(sortPlannerTasks);
@@ -168,9 +207,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
       default:
         return [];
     }
-  }, [activeNav, selectedTag, taskMeta]);
-
-
+  }, [activeNav, selectedTag, taskMeta, deletedTaskMeta]);
 
   const selectedDateLabel = useMemo(() => formatSelectedDateLabel(selectedDate), [selectedDate]);
 
@@ -184,6 +221,8 @@ export function TaskList({ onCollapse }: TaskListProps) {
         return selectedTag ? `#${selectedTag}` : '标签';
       case 'completed':
         return '已完成';
+      case 'deleted':
+        return '回收站';
       default:
         return '今天';
     }
@@ -252,6 +291,21 @@ export function TaskList({ onCollapse }: TaskListProps) {
     },
     [editValue, updateTask]
   );
+
+  const handleDeleteClick = useCallback((task: Task) => {
+    setTaskToDelete(task);
+    setDeleteConfirmDialogOpen(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!taskToDelete) {
+      return;
+    }
+
+    await softDeleteTask(taskToDelete.id);
+    setDeleteConfirmDialogOpen(false);
+    setTaskToDelete(null);
+  }, [taskToDelete, softDeleteTask]);
 
   const handleCustomDragStart = useCallback(
     (event: React.MouseEvent, task: Task) => {
@@ -352,6 +406,95 @@ export function TaskList({ onCollapse }: TaskListProps) {
       const isEditing = editingTaskId === task.id;
       const showScheduleButton = !task.completed;
       const trailingDateLabel = formatDueLikeLabel(latestBlockEnd);
+      const isDeleted = task.deleted;
+
+      if (isDeleted) {
+        return (
+          <article
+            key={task.id}
+            className="group select-none border-b border-border/50 py-2.5 transition-colors hover:bg-muted/[0.12]"
+          >
+            <div className="flex items-center gap-3 px-1">
+              <div className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                <Trash2 size={12} className="text-muted-foreground/60" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-medium text-muted-foreground/70">
+                      {task.title}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void restoreTask(task.id)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={`恢复任务 ${task.title}`}
+                  title="恢复"
+                >
+                  <RotateCcw size={13} />
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+      }
+
+      if (activeNav === 'completed') {
+        return (
+          <article
+            key={task.id}
+            className="group select-none border-b border-border/50 py-2.5 transition-colors hover:bg-muted/[0.12]"
+          >
+            <div className="flex items-center gap-3 px-1">
+              <button
+                type="button"
+                onClick={() => void toggleTaskCompletion(task.id)}
+                className={cn(
+                  'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border transition-all',
+                  task.completed
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary hover:text-primary'
+                )}
+                aria-label={task.completed ? '标记为未完成' : '标记为已完成'}
+              >
+                {task.completed ? <Check size={12} strokeWidth={2.5} /> : null}
+              </button>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        'truncate text-[14px] font-medium',
+                        task.completed ? 'text-muted-foreground line-through' : 'text-foreground'
+                      )}
+                    >
+                      {task.title}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteClick(task)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                  aria-label={`删除任务 ${task.title}`}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+      }
 
       return (
         <article
@@ -501,7 +644,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
                   <button
                     type="button"
-                    onClick={() => void deleteTask(task.id)}
+                    onClick={() => handleDeleteClick(task)}
                     className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
                     aria-label={`删除任务 ${task.title}`}
                   >
@@ -515,14 +658,17 @@ export function TaskList({ onCollapse }: TaskListProps) {
       );
     },
     [
+      activeNav,
       draggingTask?.id,
       editValue,
       editingTaskId,
       handleCustomDragStart,
+      handleDeleteClick,
       handleQuickSchedule,
       handleSaveEdit,
       handleSetEstimate,
       handleStartEditing,
+      restoreTask,
       toggleTaskCompletion,
     ]
   );
@@ -560,6 +706,27 @@ export function TaskList({ onCollapse }: TaskListProps) {
   };
 
   const renderTaskSections = () => {
+    if (activeNav === 'deleted') {
+      if (filteredTasks.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Trash2 size={20} />
+            </div>
+            <p className="text-sm font-medium">回收站为空</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="space-y-7">
+          {renderTaskSection('已删除', filteredTasks, {
+            emptyText: '回收站为空',
+          })}
+        </div>
+      );
+    }
+
     if (activeNav === 'completed') {
       if (filteredTasks.length === 0) {
         return (
@@ -665,49 +832,60 @@ export function TaskList({ onCollapse }: TaskListProps) {
     const isActive = activeNav === navType;
 
     return (
-      <button
-        type="button"
-        onClick={() => {
-          setActiveNav(navType);
-          if (navType !== 'tags') {
-            setSelectedTag(null);
-          }
-        }}
-        className={cn(
-          'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-          isActive
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
-          <span className={cn('font-medium', isActive && 'text-primary')}>{label}</span>
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveNav(navType);
+            if (navType !== 'tags') {
+              setSelectedTag(null);
+            }
+          }}
+          className={cn(
+            'flex w-full items-center justify-center rounded-lg px-2 py-2.5 transition-colors',
+            isActive
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+          )}
+          title={label}
+        >
+          <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+          {count > 0 && (
+            <span
+              className={cn(
+                'ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                isActive
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted text-muted-foreground'
+              )}
+            >
+              {count}
+            </span>
+          )}
+        </button>
+        <div
+          className={cn(
+            'pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-lg bg-foreground px-3 py-1.5 text-xs text-background opacity-0 shadow-lg transition-opacity group-hover:opacity-100',
+            'after:absolute after:right-full after:top-1/2 after:-translate-y-1/2 after:border-4 after:border-transparent after:border-r-foreground'
+          )}
+        >
+          {label}
+          {count > 0 && <span className="ml-1 text-background/70">({count})</span>}
         </div>
-        {count > 0 && (
-          <span
-            className={cn(
-              'rounded-full px-2 py-0.5 text-xs font-medium',
-              isActive
-                ? 'bg-primary/20 text-primary'
-                : 'bg-muted text-muted-foreground'
-            )}
-          >
-            {count}
-          </span>
-        )}
-      </button>
+      </div>
     );
   };
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div className="flex w-48 flex-col border-r border-border/60 bg-muted/20">
-        <div className="flex-1 space-y-1 px-3 py-4">
+      <div className="flex w-12 flex-col border-r border-border/60 bg-muted/20 py-4">
+        <div className="flex-1 space-y-1 px-2">
           <NavItem navType="today" icon={Sun} label="今天" count={navCounts.today} />
           <NavItem navType="week" icon={CalendarDays} label="本周" count={navCounts.week} />
           <NavItem navType="tags" icon={Tag} label="标签" count={navCounts.tags} />
           <NavItem navType="completed" icon={CheckCircle2} label="已完成" count={navCounts.completed} />
+          <div className="my-2 border-t border-border/50" />
+          <NavItem navType="deleted" icon={Trash2} label="回收站" count={navCounts.deleted} />
         </div>
       </div>
 
@@ -750,7 +928,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
             ) : null}
           </div>
 
-          {activeNav !== 'completed' && (
+          {activeNav !== 'completed' && activeNav !== 'deleted' && (
             <form onSubmit={handleAddTask} className="mt-4 space-y-2">
               <div className="relative">
                 <Input
@@ -798,10 +976,38 @@ export function TaskList({ onCollapse }: TaskListProps) {
           {renderTaskSections()}
         </div>
 
-        {activeNav !== 'completed' && activeNav !== 'tags' && (
+        {activeNav !== 'completed' && activeNav !== 'tags' && activeNav !== 'deleted' && (
           <TaskProgressPie tasks={tasks} dimension="all" />
         )}
       </div>
+
+      <Dialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除任务「{taskToDelete?.title}」吗？<br />
+              删除后可以在回收站中恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDeleteConfirmDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
