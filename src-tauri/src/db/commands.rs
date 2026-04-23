@@ -1,5 +1,5 @@
 use tauri::State;
-use sqlx::SqlitePool;
+use sqlx::{SqlitePool, Row};
 use uuid::Uuid;
 use serde_json;
 
