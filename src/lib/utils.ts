@@ -225,16 +225,16 @@ export function getTimeBlockPalette(seed: { id?: string | null; title?: string |
 }
 
 export const TAG_PALETTES = [
-  { accent: '#4F7CFF', text: '#173272' },
-  { accent: '#FF8FA3', text: '#7B2640' },
-  { accent: '#49B6A5', text: '#0F5C53' },
-  { accent: '#FFC85C', text: '#7A4A00' },
-  { accent: '#8C6BFF', text: '#40278E' },
-  { accent: '#63C7FF', text: '#0C5B86' },
-  { accent: '#FF9E7A', text: '#7A3820' },
-  { accent: '#7CD992', text: '#1F6B34' },
-  { accent: '#5FD6C2', text: '#0F6158' },
-  { accent: '#F59E0B', text: '#78350F' },
+  { accent: '#F7C2C2', text: '#995555' },
+  { accent: '#FFEBB3', text: '#997722' },
+  { accent: '#C2E8F7', text: '#558899' },
+  { accent: '#D4F7C2', text: '#559955' },
+  { accent: '#E2C2F7', text: '#775599' },
+  { accent: '#F7E2C2', text: '#997744' },
+  { accent: '#C2F7E2', text: '#449977' },
+  { accent: '#F7C2E2', text: '#994477' },
+  { accent: '#E5E7EB', text: '#666666' },
+  { accent: '#FECACA', text: '#994444' },
 ] as const;
 
 export function getTagPalette(tag: string) {
