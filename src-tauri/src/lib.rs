@@ -54,10 +54,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             db::get_tasks,
+            db::get_deleted_tasks,
             db::get_task,
             db::create_task,
             db::update_task,
-            db::delete_task,
+            db::soft_delete_task,
+            db::restore_task,
+            db::permanent_delete_task,
             db::get_projects,
             db::create_project,
             db::get_time_blocks,

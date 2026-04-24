@@ -1,5 +1,5 @@
 pub const MIGRATIONS: &str = r#"
--- 创建任务表
+-- 创建任务表 (原始结构，新字段在 ensure_project_schema 中动态添加)
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY NOT NULL,
     title TEXT NOT NULL,

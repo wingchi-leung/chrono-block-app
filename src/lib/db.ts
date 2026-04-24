@@ -17,6 +17,10 @@ export const taskApi = {
     return invoke<Task[]>('get_tasks');
   },
 
+  async getDeleted(): Promise<Task[]> {
+    return invoke<Task[]>('get_deleted_tasks');
+  },
+
   async getById(id: string): Promise<Task | null> {
     return invoke<Task | null>('get_task', { id });
   },
@@ -29,8 +33,20 @@ export const taskApi = {
     return invoke<Task>('update_task', { id, input });
   },
 
+  async softDelete(id: string): Promise<void> {
+    return invoke('soft_delete_task', { id });
+  },
+
+  async restore(id: string): Promise<void> {
+    return invoke('restore_task', { id });
+  },
+
+  async permanentDelete(id: string): Promise<void> {
+    return invoke('permanent_delete_task', { id });
+  },
+
   async delete(id: string): Promise<void> {
-    return invoke('delete_task', { id });
+    return invoke('soft_delete_task', { id });
   },
 };
 

@@ -26,7 +26,7 @@ pub async fn get_tasks(db: State<'_, SqlitePool>) -> Result<Vec<Task>, String> {
     let pool = db.inner();
 
     let rows = sqlx::query(
-        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks ORDER BY created_at DESC"
+        "SELECT id, title, description, completed, color, tags, estimated_duration, deleted, deleted_at, created_at, updated_at FROM tasks WHERE deleted = 0 ORDER BY created_at DESC"
     )
     .fetch_all(pool)
     .await
@@ -42,6 +42,39 @@ pub async fn get_tasks(db: State<'_, SqlitePool>) -> Result<Vec<Task>, String> {
             color: row.get("color"),
             tags: parse_tags(row.get::<Option<&str>, _>("tags")),
             estimated_duration: row.get("estimated_duration"),
+            deleted: row.get::<i64, _>("deleted") != 0,
+            deleted_at: row.get("deleted_at"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+        .collect();
+
+    Ok(tasks)
+}
+
+#[tauri::command]
+pub async fn get_deleted_tasks(db: State<'_, SqlitePool>) -> Result<Vec<Task>, String> {
+    let pool = db.inner();
+
+    let rows = sqlx::query(
+        "SELECT id, title, description, completed, color, tags, estimated_duration, deleted, deleted_at, created_at, updated_at FROM tasks WHERE deleted = 1 ORDER BY deleted_at DESC"
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("获取已删除任务失败: {}", e))?;
+
+    let tasks: Vec<Task> = rows
+        .into_iter()
+        .map(|row| Task {
+            id: row.get("id"),
+            title: row.get("title"),
+            description: row.get("description"),
+            completed: row.get::<i64, _>("completed") != 0,
+            color: row.get("color"),
+            tags: parse_tags(row.get::<Option<&str>, _>("tags")),
+            estimated_duration: row.get("estimated_duration"),
+            deleted: row.get::<i64, _>("deleted") != 0,
+            deleted_at: row.get("deleted_at"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
         })
@@ -55,7 +88,7 @@ pub async fn get_task(db: State<'_, SqlitePool>, id: String) -> Result<Option<Ta
     let pool = db.inner();
 
     let row = sqlx::query(
-        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
+        "SELECT id, title, description, completed, color, tags, estimated_duration, deleted, deleted_at, created_at, updated_at FROM tasks WHERE id = ?"
     )
     .bind(&id)
     .fetch_optional(pool)
@@ -70,6 +103,8 @@ pub async fn get_task(db: State<'_, SqlitePool>, id: String) -> Result<Option<Ta
         color: row.get("color"),
         tags: parse_tags(row.get::<Option<&str>, _>("tags")),
         estimated_duration: row.get("estimated_duration"),
+        deleted: row.get::<i64, _>("deleted") != 0,
+        deleted_at: row.get("deleted_at"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }))
@@ -84,7 +119,7 @@ pub async fn create_task(db: State<'_, SqlitePool>, input: CreateTaskInput) -> R
     let tags_json = serialize_tags(&input.tags);
 
     sqlx::query(
-        "INSERT INTO tasks (id, title, description, completed, color, tags, estimated_duration, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, title, description, completed, color, tags, estimated_duration, deleted, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, 0, ?, ?)"
     )
     .bind(&id)
     .bind(&input.title)
@@ -106,6 +141,8 @@ pub async fn create_task(db: State<'_, SqlitePool>, input: CreateTaskInput) -> R
         color: input.color,
         tags: input.tags,
         estimated_duration: input.estimated_duration,
+        deleted: false,
+        deleted_at: None,
         created_at: now.clone(),
         updated_at: now,
     })
@@ -116,7 +153,7 @@ pub async fn update_task(db: State<'_, SqlitePool>, id: String, input: UpdateTas
     let pool = db.inner();
 
     let existing_row = sqlx::query(
-        "SELECT id, title, description, completed, color, tags, estimated_duration, created_at, updated_at FROM tasks WHERE id = ?"
+        "SELECT id, title, description, completed, color, tags, estimated_duration, deleted, deleted_at, created_at, updated_at FROM tasks WHERE id = ?"
     )
     .bind(&id)
     .fetch_optional(pool)
@@ -137,6 +174,8 @@ pub async fn update_task(db: State<'_, SqlitePool>, id: String, input: UpdateTas
         color: input.color.or_else(|| existing_row.get("color")),
         tags: new_tags,
         estimated_duration: input.estimated_duration.or_else(|| existing_row.get("estimated_duration")),
+        deleted: existing_row.get::<i64, _>("deleted") != 0,
+        deleted_at: existing_row.get("deleted_at"),
         created_at: existing_row.get("created_at"),
         updated_at: now.clone(),
     };
@@ -160,14 +199,45 @@ pub async fn update_task(db: State<'_, SqlitePool>, id: String, input: UpdateTas
 }
 
 #[tauri::command]
-pub async fn delete_task(db: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+pub async fn soft_delete_task(db: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+    let pool = db.inner();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query("UPDATE tasks SET deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ?")
+        .bind(&now)
+        .bind(&now)
+        .bind(&id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("删除任务失败: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn restore_task(db: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+    let pool = db.inner();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query("UPDATE tasks SET deleted = 0, deleted_at = NULL, updated_at = ? WHERE id = ?")
+        .bind(&now)
+        .bind(&id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("恢复任务失败: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn permanent_delete_task(db: State<'_, SqlitePool>, id: String) -> Result<(), String> {
     let pool = db.inner();
 
     sqlx::query("DELETE FROM tasks WHERE id = ?")
         .bind(&id)
         .execute(pool)
         .await
-        .map_err(|e| format!("删除任务失败: {}", e))?;
+        .map_err(|e| format!("永久删除任务失败: {}", e))?;
 
     Ok(())
 }
