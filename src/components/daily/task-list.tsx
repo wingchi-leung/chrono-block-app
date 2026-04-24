@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addMinutes, format, isSameDay, setHours, setMinutes, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import {
+  Calendar,
   Check,
   ListTodo,
   PanelLeftClose,
@@ -27,7 +28,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import type { Task, TimeBlock } from '@/types';
-import { cn, parseTagsFromText, formatTitleWithTags, getTagPalette } from '@/lib/utils';
+import { cn, parseTagsFromText, formatTitleWithTags, getTagPalette, hexToRgba } from '@/lib/utils';
 import { TaskProgressPie } from './task-progress-pie';
 
 type TaskListProps = {
@@ -400,8 +401,8 @@ export function TaskList({ onCollapse }: TaskListProps) {
   );
 
   const renderTaskCard = useCallback(
-    (meta: TaskMeta, _options?: { emphasizeScheduling?: boolean }) => {
-      const { task, latestBlockEnd } = meta;
+    (meta: TaskMeta, options?: { emphasizeScheduling?: boolean }) => {
+      const { task, blockCount, isScheduledOnSelectedDate, latestBlockEnd } = meta;
       const isEditing = editingTaskId === task.id;
       const showScheduleButton = !task.completed;
       const trailingDateLabel = formatDueLikeLabel(latestBlockEnd);
@@ -500,7 +501,7 @@ export function TaskList({ onCollapse }: TaskListProps) {
           key={task.id}
           draggable={false}
           className={cn(
-            'group flex h-12 items-center gap-3 border-b border-border/50 px-1 transition-colors',
+            'group select-none border-b border-border/70 py-3 transition-colors',
             draggingTask?.id === task.id
               ? 'bg-primary/[0.04]'
               : 'hover:bg-muted/[0.18]'
@@ -510,138 +511,148 @@ export function TaskList({ onCollapse }: TaskListProps) {
             event.preventDefault();
           }}
         >
-          {showScheduleButton ? (
+          <div className="flex items-start gap-3 px-1">
             <button
               type="button"
-              onClick={() => void handleQuickSchedule(task)}
-              className="inline-flex shrink-0 items-center gap-0.5 rounded px-0.5 py-0.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 group/btn"
-              aria-label={`快速安排任务 ${task.title}`}
+              onClick={() => void toggleTaskCompletion(task.id)}
+              className={cn(
+                'mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border transition-all',
+                task.completed
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:border-primary hover:text-primary'
+              )}
+              aria-label={task.completed ? '标记为未完成' : '标记为已完成'}
             >
-              <Sparkles size={12} />
-              <span className="max-w-0 overflow-hidden whitespace-nowrap text-xs transition-all duration-200 group-hover/btn:max-w-20">
-                一键安排
-              </span>
+              {task.completed ? <Check size={12} strokeWidth={2.5} /> : null}
             </button>
-          ) : null}
 
-          <button
-            type="button"
-            onClick={() => void toggleTaskCompletion(task.id)}
-            className={cn(
-              'inline-flex shrink-0 items-center justify-center rounded-none border transition-all',
-              task.completed
-                ? 'border-primary bg-primary'
-                : 'bg-white hover:border-gray-600'
-            )}
-            aria-label={task.completed ? '标记为未完成' : '标记为已完成'}
-            style={{
-              width: '18px',
-              height: '18px',
-              borderColor: task.completed ? undefined : '#666',
-              color: task.completed ? '#fff' : '#999',
-            }}
-          >
-            {task.completed ? <Check size={10} strokeWidth={2.5} /> : null}
-          </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  {isEditing ? (
+                    <Input
+                      ref={editInputRef}
+                      type="text"
+                      value={editValue}
+                      onChange={(event) => setEditValue(event.target.value)}
+                      onBlur={() => void handleSaveEdit(task.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void handleSaveEdit(task.id);
+                        }
 
-          <div className="min-w-0 flex-1">
-            {isEditing ? (
-              <Input
-                ref={editInputRef}
-                type="text"
-                value={editValue}
-                onChange={(event) => setEditValue(event.target.value)}
-                onBlur={() => void handleSaveEdit(task.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void handleSaveEdit(task.id);
-                  }
-
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    setEditingTaskId(null);
-                    setEditValue('');
-                  }
-                }}
-                className="h-8 rounded-lg border-gray-300 bg-white px-2 text-sm shadow-none"
-                style={{ color: '#333' }}
-              />
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="block min-w-0 flex-1 text-left"
-                  onClick={() => handleStartEditing(task)}
-                  aria-label={`编辑任务 ${task.title}`}
-                >
-                  <span
-                    className={cn(
-                      'truncate text-sm font-medium',
-                      task.completed ? 'line-through' : ''
-                    )}
-                    style={{ color: task.completed ? '#999' : '#333' }}
-                  >
-                    {task.title}
-                  </span>
-                </button>
-
-                {task.tags && task.tags.length > 0 ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    {task.tags!.map((tag) => {
-                      const palette = getTagPalette(tag);
-                      return (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium"
-                          style={{
-                            backgroundColor: palette.accent,
-                            color: palette.text,
-                          }}
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setEditingTaskId(null);
+                          setEditValue('');
+                        }
+                      }}
+                      className="h-8 rounded-lg border-border bg-background px-2 text-sm shadow-none focus-visible:ring-primary/20"
+                    />
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        type="button"
+                        className="block min-w-0 flex-1 text-left"
+                        onClick={() => handleStartEditing(task)}
+                        aria-label={`编辑任务 ${task.title}`}
+                      >
+                        <div
+                          className={cn(
+                            'truncate text-[15px] font-medium leading-6',
+                            task.completed ? 'text-muted-foreground line-through' : 'text-foreground'
+                          )}
                         >
-                          #{tag}
+                          {task.title}
+                        </div>
+                      </button>
+                      {trailingDateLabel ? (
+                        <span className="shrink-0 pt-0.5 text-[13px] text-red-500">
+                          {trailingDateLabel}
                         </span>
-                      );
-                    })}
+                      ) : null}
+                    </div>
+                  )}
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
+                    {(task.tags ?? []).length > 0
+                      ? (task.tags ?? []).map((tag) => {
+                          const palette = getTagPalette(tag);
+                          return (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full px-2 py-0.5 font-medium"
+                              style={{
+                                backgroundColor: hexToRgba(palette.accent, 0.18),
+                                color: palette.text,
+                                border: `1px solid ${hexToRgba(palette.accent, 0.3)}`,
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          );
+                        })
+                      : null}
+                    {blockCount > 0 && !isScheduledOnSelectedDate ? (
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        <Calendar size={10} />
+                        {blockCount}
+                      </span>
+                    ) : null}
                   </div>
-                ) : null}
-
-                {trailingDateLabel ? (
-                  <span className="shrink-0 text-xs" style={{ color: '#999' }}>
-                    {trailingDateLabel}
-                  </span>
-                ) : null}
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
-            {QUICK_DURATION_OPTIONS.map((duration) => (
-              <button
-                key={`${task.id}-${duration}`}
-                type="button"
-                onClick={() => void handleSetEstimate(task.id, duration)}
-                className={cn(
-                  'rounded px-1.5 py-0.5 text-xs transition-colors',
-                  task.estimated_duration === duration
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-500 hover:bg-gray-100'
-                )}
-                style={{ color: task.estimated_duration === duration ? '#fff' : '#666' }}
-                aria-label={`将任务时长设置为 ${duration} 分钟`}
-              >
-                {duration}m
-              </button>
-            ))}
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1">
+                  {QUICK_DURATION_OPTIONS.map((duration) => (
+                    <button
+                      key={`${task.id}-${duration}`}
+                      type="button"
+                      onClick={() => void handleSetEstimate(task.id, duration)}
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[11px] transition-colors',
+                        task.estimated_duration === duration
+                          ? 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                      aria-label={`将任务时长设置为 ${duration} 分钟`}
+                    >
+                      {duration}m
+                    </button>
+                  ))}
+                </div>
 
-            <button
-              type="button"
-              onClick={() => void deleteTask(task.id)}
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-red-500"
-              aria-label={`删除任务 ${task.title}`}
-            >
-              <X size={12} />
-            </button>
+                <div className="flex items-center gap-1">
+                  {showScheduleButton ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleQuickSchedule(task)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
+                        options?.emphasizeScheduling
+                          ? 'bg-foreground text-background hover:opacity-90'
+                          : 'text-foreground hover:bg-muted'
+                      )}
+                      aria-label={`快速安排任务 ${task.title}`}
+                    >
+                      <Sparkles size={11} />
+                      一键安排
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteClick(task)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                    aria-label={`删除任务 ${task.title}`}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </article>
       );
@@ -673,16 +684,16 @@ export function TaskList({ onCollapse }: TaskListProps) {
     const emptyText = options?.emptyText ?? '这里还没有任务';
 
     return (
-      <section className="space-y-1">
+      <section className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold" style={{ color: '#333' }}>{title}</h4>
-            <span className="text-xs" style={{ color: '#999' }}>{tasks.length}</span>
+            <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+            <span className="text-xs text-muted-foreground">{tasks.length}</span>
           </div>
         </div>
 
         {tasks.length === 0 ? (
-          <div className="px-1 py-2 text-sm" style={{ color: '#999' }}>
+          <div className="px-1 py-3 text-sm text-muted-foreground">
             {emptyText}
           </div>
         ) : (
@@ -716,28 +727,36 @@ export function TaskList({ onCollapse }: TaskListProps) {
       );
     }
 
-    return (
-      <section className="space-y-1 border-t border-gray-200 pt-3">
-        <button
-          type="button"
-          onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <div className="flex items-center gap-2">
-            <History size={14} style={{ color: '#999' }} />
-            <h4 className="text-sm font-semibold" style={{ color: '#333' }}>历史任务</h4>
-            <span className="text-xs" style={{ color: '#999' }}>{completedTasks.length}</span>
+    if (activeNav === 'completed') {
+      if (filteredTasks.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <CheckCircle2 size={20} />
+            </div>
+            <p className="text-sm font-medium">暂无已完成任务</p>
           </div>
-          {showCompletedTasks ? (
-            <ChevronUp size={14} style={{ color: '#999' }} />
-          ) : (
-            <ChevronDown size={14} style={{ color: '#999' }} />
-          )}
-        </button>
+        );
+      }
 
-        {showCompletedTasks ? (
-          <div className="mt-1">
-            {completedTasks.map((task) => renderTaskCard(task))}
+      return (
+        <div className="space-y-7">
+          {renderTaskSection('已完成', filteredTasks, {
+            emptyText: '暂无已完成任务',
+          })}
+        </div>
+      );
+    }
+
+    if (activeNav === 'tags' && !selectedTag) {
+      if (allTags.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Tag size={20} />
+            </div>
+            <p className="text-sm font-medium">暂无标签</p>
+            <p className="text-xs text-muted-foreground">添加任务时使用 #标签名 即可创建标签</p>
           </div>
         );
       }
@@ -779,11 +798,11 @@ export function TaskList({ onCollapse }: TaskListProps) {
 
     if (filteredTasks.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-6 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100" style={{ color: '#999' }}>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 px-5 py-8 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <ListTodo size={20} />
           </div>
-          <p className="text-sm font-medium" style={{ color: '#666' }}>暂无任务</p>
+          <p className="text-sm font-medium">暂无任务</p>
         </div>
       );
     }
@@ -791,36 +810,54 @@ export function TaskList({ onCollapse }: TaskListProps) {
     const unscheduledInFiltered = filteredTasks.filter(({ isScheduledOnSelectedDate }) => !isScheduledOnSelectedDate);
 
     return (
-      <div className="space-y-4">
-        {plannerTasks.length > 0
-          ? renderTaskSection('任务', unscheduledTasks, {
-              emptyText: '当前没有待办任务',
-            })
-          : null}
-        {renderCompletedTasks()}
+      <div className="space-y-7">
+        {renderTaskSection('任务', unscheduledInFiltered.length > 0 ? unscheduledInFiltered : filteredTasks, {
+          emptyText: activeNav === 'tags' ? '该标签下暂无任务' : '当前没有待办任务',
+        })}
       </div>
     );
   };
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden bg-white">
-      <div className="border-b border-gray-200 px-5 pb-3 pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-semibold tracking-tight" style={{ color: '#333' }}>今天</h3>
-              <span className="text-xs" style={{ color: '#999' }}>{selectedDateLabel}</span>
-            </div>
-          </div>
+  const NavItem = ({
+    navType,
+    icon: Icon,
+    label,
+    count,
+  }: {
+    navType: TaskNavType;
+    icon: React.ElementType;
+    label: string;
+    count: number;
+  }) => {
+    const isActive = activeNav === navType;
 
-          {onCollapse ? (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-xl transition-colors hover:bg-gray-100"
-              style={{ color: '#999' }}
-              aria-label="收起任务栏"
-              title="收起任务栏"
+    return (
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveNav(navType);
+            if (navType !== 'tags') {
+              setSelectedTag(null);
+            }
+          }}
+          className={cn(
+            'flex w-full items-center justify-center rounded-lg px-2 py-2.5 transition-colors',
+            isActive
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+          )}
+          title={label}
+        >
+          <Icon size={18} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+          {count > 0 && (
+            <span
+              className={cn(
+                'ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                isActive
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted text-muted-foreground'
+              )}
             >
               {count}
             </span>
@@ -839,50 +876,109 @@ export function TaskList({ onCollapse }: TaskListProps) {
     );
   };
 
-        <form onSubmit={handleAddTask} className="mt-3 space-y-2">
-          <div className="relative">
-            <Input
-              ref={inputRef}
-              type="text"
-              placeholder="添加任务"
-              value={newTaskTitle}
-              onChange={(event) => setNewTaskTitle(event.target.value)}
-              className="h-10 rounded-lg border-gray-200 bg-gray-50 pl-10 pr-14 text-sm shadow-none focus-visible:border-gray-300 focus-visible:bg-white focus-visible:ring-0"
-              style={{ color: '#333' }}
-            />
-            <Plus size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#999' }} />
-            <button
-              type="submit"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md px-2.5 py-1 text-xs transition-colors hover:bg-gray-200"
-              style={{ color: '#666' }}
-              aria-label="添加任务"
-            >
-              添加
-            </button>
-          </div>
+  return (
+    <div className="flex h-full overflow-hidden bg-background">
+      <div className="flex w-12 flex-col border-r border-border/60 bg-muted/20 py-4">
+        <div className="flex-1 space-y-1 px-2">
+          <NavItem navType="today" icon={Sun} label="今天" count={navCounts.today} />
+          <NavItem navType="week" icon={CalendarDays} label="本周" count={navCounts.week} />
+          <NavItem navType="tags" icon={Tag} label="标签" count={navCounts.tags} />
+          <NavItem navType="completed" icon={CheckCircle2} label="已完成" count={navCounts.completed} />
+          <div className="my-2 border-t border-border/50" />
+          <NavItem navType="deleted" icon={Trash2} label="回收站" count={navCounts.deleted} />
+        </div>
+      </div>
 
-          <div className="flex items-center gap-1 text-xs" style={{ color: '#999' }}>
-            <span>默认时长</span>
-            {QUICK_DURATION_OPTIONS.map((duration) => (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="border-b border-border/60 px-5 pb-4 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {activeNav === 'tags' && selectedTag && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTag(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="返回标签列表"
+                >
+                  <ChevronDown size={16} className="-rotate-90" />
+                </button>
+              )}
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-[28px] font-semibold tracking-tight text-foreground">
+                    {getNavTitle()}
+                  </h3>
+                  {activeNav === 'today' && (
+                    <span className="text-xs text-muted-foreground">{selectedDateLabel}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {onCollapse ? (
               <button
                 type="button"
-                onClick={() => setQuickDuration(duration)}
-                className={cn(
-                  'rounded-md px-1.5 py-0.5 transition-colors',
-                  quickDuration === duration
-                    ? 'bg-gray-800 text-white'
-                    : 'hover:bg-gray-100'
-                )}
-                style={{ color: quickDuration === duration ? '#fff' : '#666' }}
-                aria-label={`将新任务默认时长设为 ${duration} 分钟`}
+                onClick={onCollapse}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="收起任务栏"
+                title="收起任务栏"
               >
                 <PanelLeftClose size={16} />
               </button>
             ) : null}
           </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-4 pt-3">
-        {renderTaskSections()}
+          {activeNav !== 'completed' && activeNav !== 'deleted' && (
+            <form onSubmit={handleAddTask} className="mt-4 space-y-2">
+              <div className="relative">
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="添加任务"
+                  value={newTaskTitle}
+                  onChange={(event) => setNewTaskTitle(event.target.value)}
+                  className="h-12 rounded-xl border-transparent bg-muted/35 pl-11 pr-16 shadow-none focus-visible:border-border focus-visible:bg-background focus-visible:ring-0"
+                />
+                <Plus size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <button
+                  type="submit"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="添加任务"
+                >
+                  添加
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span>默认时长</span>
+                {QUICK_DURATION_OPTIONS.map((duration) => (
+                  <button
+                    key={`quick-duration-${duration}`}
+                    type="button"
+                    onClick={() => setQuickDuration(duration)}
+                    className={cn(
+                      'rounded-md px-1.5 py-0.5 transition-colors',
+                      quickDuration === duration
+                        ? 'bg-foreground text-background'
+                        : 'hover:bg-muted hover:text-foreground'
+                    )}
+                    aria-label={`将新任务默认时长设为 ${duration} 分钟`}
+                  >
+                    {duration}m
+                  </button>
+                ))}
+              </div>
+            </form>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4">
+          {renderTaskSections()}
+        </div>
+
+        {activeNav !== 'completed' && activeNav !== 'tags' && activeNav !== 'deleted' && (
+          <TaskProgressPie tasks={tasks} dimension="all" />
+        )}
       </div>
 
       <Dialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
