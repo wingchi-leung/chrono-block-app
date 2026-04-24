@@ -17,15 +17,6 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import type { Task, TimeBlock } from '@/types';
 import { cn, parseTagsFromText, formatTitleWithTags, getTagPalette, hexToRgba } from '@/lib/utils';
@@ -501,157 +492,184 @@ export function TaskList({ onCollapse }: TaskListProps) {
           key={task.id}
           draggable={false}
           className={cn(
-            'group select-none border-b border-border/30 py-2.5 transition-colors',
+            'group select-none border-b border-border/25 py-1.5 transition-colors',
             draggingTask?.id === task.id
               ? 'bg-primary/8'
-              : 'hover:bg-muted/25'
+              : 'hover:bg-muted/20'
           )}
           onMouseDown={(event) => handleCustomDragStart(event, task)}
           onDragStart={(event) => {
             event.preventDefault();
           }}
         >
-          <div className="flex items-start gap-2.5 px-1">
+          <div className="flex items-start gap-2 px-1">
             <button
               type="button"
               onClick={() => void toggleTaskCompletion(task.id)}
               className={cn(
-                'mt-0.5 inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-all',
+                'mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all',
                 task.completed
                   ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border/60 bg-background text-muted-foreground hover:border-primary hover:text-primary'
+                  : 'border-border/50 bg-background text-muted-foreground hover:border-primary hover:text-primary'
               )}
               aria-label={task.completed ? '标记为未完成' : '标记为已完成'}
             >
-              {task.completed ? <Check size={10} strokeWidth={2.5} /> : null}
+              {task.completed ? <Check size={9} strokeWidth={2.5} /> : null}
             </button>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  {isEditing ? (
-                    <Input
-                      ref={editInputRef}
-                      type="text"
-                      value={editValue}
-                      onChange={(event) => setEditValue(event.target.value)}
-                      onBlur={() => void handleSaveEdit(task.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void handleSaveEdit(task.id);
-                        }
+              {isEditing ? (
+                <Input
+                  ref={editInputRef}
+                  type="text"
+                  value={editValue}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  onBlur={() => void handleSaveEdit(task.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleSaveEdit(task.id);
+                    }
 
-                        if (event.key === 'Escape') {
-                          event.preventDefault();
-                          setEditingTaskId(null);
-                          setEditValue('');
-                        }
-                      }}
-                      className="h-8 rounded-md border-border/60 bg-background px-2 text-sm shadow-none focus-visible:ring-primary/10"
-                    />
-                  ) : (
-                    <div className="flex items-start justify-between gap-2">
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setEditingTaskId(null);
+                      setEditValue('');
+                    }
+                  }}
+                  className="h-7 rounded-md border-border/50 bg-background px-2 text-sm shadow-none focus-visible:ring-primary/10"
+                />
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
                       <button
                         type="button"
-                        className="block min-w-0 flex-1 text-left"
+                        className="block w-full text-left"
                         onClick={() => handleStartEditing(task)}
                         aria-label={`编辑任务 ${task.title}`}
                       >
                         <div
                           className={cn(
-                            'truncate text-sm font-medium leading-5',
-                            task.completed ? 'text-muted-foreground/70 line-through' : 'text-foreground'
+                            'truncate text-sm leading-5',
+                            task.completed
+                              ? 'text-muted-foreground/60 line-through'
+                              : 'text-foreground'
                           )}
                         >
                           {task.title}
                         </div>
                       </button>
-                      {trailingDateLabel ? (
-                        <span className="shrink-0 pt-0.5 text-xs text-destructive/80">
-                          {trailingDateLabel}
-                        </span>
-                      ) : null}
                     </div>
-                  )}
-
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/80">
-                    {(task.tags ?? []).length > 0
-                      ? (task.tags ?? []).map((tag) => {
-                          const palette = getTagPalette(tag);
-                          return (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium"
-                              style={{
-                                backgroundColor: hexToRgba(palette.accent, 0.12),
-                                color: palette.text,
-                                border: `1px solid ${hexToRgba(palette.accent, 0.2)}`,
-                              }}
-                            >
-                              #{tag}
-                            </span>
-                          );
-                        })
-                      : null}
-                    {blockCount > 0 && !isScheduledOnSelectedDate ? (
-                      <span className="inline-flex items-center gap-0.5 text-muted-foreground/70">
-                        <Calendar size={9} />
-                        {blockCount}
+                    {trailingDateLabel ? (
+                      <span className="shrink-0 pt-0.5 text-[11px] text-destructive/70">
+                        {trailingDateLabel}
                       </span>
                     ) : null}
                   </div>
-                </div>
-              </div>
 
-              <div className="mt-1.5 flex items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-0.5">
-                  {QUICK_DURATION_OPTIONS.map((duration) => (
-                    <button
-                      key={`${task.id}-${duration}`}
-                      type="button"
-                      onClick={() => void handleSetEstimate(task.id, duration)}
-                      className={cn(
-                        'rounded-md px-1.5 py-0.5 text-[11px] transition-colors',
-                        task.estimated_duration === duration
-                          ? 'bg-primary/12 text-primary font-medium'
-                          : 'text-muted-foreground/70 hover:bg-muted/50 hover:text-foreground'
-                      )}
-                      aria-label={`将任务时长设置为 ${duration} 分钟`}
-                    >
-                      {duration}m
-                    </button>
-                  ))}
-                </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {(task.tags ?? []).length > 0
+                        ? (task.tags ?? []).map((tag) => {
+                            const palette = getTagPalette(tag);
+                            return (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center rounded px-1 py-0.5 text-[11px] font-medium"
+                                style={{
+                                  backgroundColor: hexToRgba(palette.accent, 0.1),
+                                  color: palette.text,
+                                }}
+                              >
+                                #{tag}
+                              </span>
+                            );
+                          })
+                        : null}
+                      {blockCount > 0 && !isScheduledOnSelectedDate ? (
+                        <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/60">
+                          <Calendar size={8} />
+                          {blockCount}
+                        </span>
+                      ) : null}
+                    </div>
 
-                <div className="flex items-center gap-0.5">
-                  {showScheduleButton ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleQuickSchedule(task)}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
-                        options?.emphasizeScheduling
-                          ? 'bg-primary/12 text-primary font-medium hover:bg-primary/18'
-                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                      )}
-                      aria-label={`快速安排任务 ${task.title}`}
-                    >
-                      <Sparkles size={11} />
-                      一键安排
-                    </button>
-                  ) : null}
+                    <div className="flex items-center gap-0.5">
+                      {showScheduleButton ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleQuickSchedule(task)}
+                          className={cn(
+                            'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] transition-all group/btn',
+                            options?.emphasizeScheduling
+                              ? 'text-primary hover:bg-primary/10'
+                              : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-primary'
+                          )}
+                          aria-label={`快速安排任务 ${task.title}`}
+                        >
+                          <Sparkles size={10} />
+                          <span className="max-w-0 overflow-hidden whitespace-nowrap transition-all group-hover/btn:max-w-16 group-hover/btn:ml-0.5">
+                            一键安排
+                          </span>
+                        </button>
+                      ) : null}
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteClick(task)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-                    aria-label={`删除任务 ${task.title}`}
-                  >
-                    <X size={12} />
-                  </button>
+                      <div className="relative group/delete">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(task)}
+                          className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-muted/40 hover:text-destructive"
+                          aria-label={`删除任务 ${task.title}`}
+                        >
+                          <X size={10} />
+                        </button>
+
+                        {deleteConfirmDialogOpen && taskToDelete?.id === task.id && (
+                          <div className="absolute right-0 top-full mt-1 z-10 flex min-w-32 flex-col rounded-md border border-border/60 bg-popover p-1.5 shadow-sm">
+                            <p className="px-1.5 py-1 text-xs text-muted-foreground">确定删除？</p>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmDialogOpen(false)}
+                                className="flex-1 rounded px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/40"
+                              >
+                                取消
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleConfirmDelete}
+                                className="flex-1 rounded px-2 py-1 text-[11px] text-destructive transition-colors hover:bg-destructive/10"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    {QUICK_DURATION_OPTIONS.map((duration) => (
+                      <button
+                        key={`${task.id}-${duration}`}
+                        type="button"
+                        onClick={() => void handleSetEstimate(task.id, duration)}
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                          task.estimated_duration === duration
+                            ? 'bg-primary/12 text-primary font-medium'
+                            : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-foreground'
+                        )}
+                        aria-label={`将任务时长设置为 ${duration} 分钟`}
+                      >
+                        {duration}m
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </article>
@@ -842,21 +860,21 @@ export function TaskList({ onCollapse }: TaskListProps) {
             }
           }}
           className={cn(
-            'relative flex w-full items-center justify-center rounded-lg px-2 py-2 transition-colors',
+            'relative flex w-full items-center justify-center rounded-md p-1.5 transition-all',
             isActive
-              ? 'bg-primary/8 text-primary border border-primary/20'
-              : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-muted/30 hover:text-foreground'
           )}
           title={label}
         >
-          <Icon size={16} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+          <Icon size={14} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
           {count > 0 && (
             <span
               className={cn(
-                'absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-0.5 text-[10px] font-medium',
+                'absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[9px] font-medium',
                 isActive
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted-foreground/20 text-muted-foreground'
+                  : 'bg-muted-foreground/25 text-muted-foreground'
               )}
             >
               {count > 99 ? '99+' : count}
@@ -865,12 +883,12 @@ export function TaskList({ onCollapse }: TaskListProps) {
         </button>
         <div
           className={cn(
-            'pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 rounded-lg bg-foreground px-3 py-1.5 text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100',
-            'after:absolute after:left-full after:top-1/2 after:-translate-y-1/2 after:border-4 after:border-transparent after:border-l-foreground'
+            'pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 rounded-md bg-popover border border-border/60 px-2.5 py-1 text-xs text-popover-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
+            'after:absolute after:left-full after:top-1/2 after:-translate-y-1/2 after:border-4 after:border-transparent after:border-l-popover'
           )}
         >
           {label}
-          {count > 0 && <span className="ml-1 text-background/70">({count})</span>}
+          {count > 0 && <span className="ml-1 text-muted-foreground">({count})</span>}
         </div>
       </div>
     );
@@ -970,44 +988,18 @@ export function TaskList({ onCollapse }: TaskListProps) {
         )}
       </div>
 
-      <div className="flex w-11 flex-col border-l border-border/60 bg-muted/15 py-4">
-        <div className="flex-1 space-y-1 px-1.5">
+      <div className="flex w-9 flex-col border-l border-border/30 bg-muted/10 py-3">
+        <div className="flex-1 space-y-0.5 px-1">
           <NavItem navType="today" icon={Sun} label="今天" count={navCounts.today} />
           <NavItem navType="week" icon={CalendarDays} label="本周" count={navCounts.week} />
           <NavItem navType="tags" icon={Tag} label="标签" count={navCounts.tags} />
           <NavItem navType="completed" icon={CheckCircle2} label="已完成" count={navCounts.completed} />
-          <div className="my-2 border-t border-border/50" />
+          <div className="my-1.5 border-t border-border/30" />
           <NavItem navType="deleted" icon={Trash2} label="回收站" count={navCounts.deleted} />
         </div>
       </div>
 
-      <Dialog open={deleteConfirmDialogOpen} onOpenChange={setDeleteConfirmDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>确认删除</DialogTitle>
-            <DialogDescription>
-              确定要删除任务「{taskToDelete?.title}」吗？<br />
-              删除后可以在回收站中恢复。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-2 sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setDeleteConfirmDialogOpen(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleConfirmDelete}
-            >
-              删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
     </div>
   );
 }
