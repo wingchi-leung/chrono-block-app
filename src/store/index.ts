@@ -111,6 +111,7 @@ export const useStore = create<AppState>()(
           color: updates.color ?? undefined,
           tags: updates.tags ?? undefined,
           estimated_duration: updates.estimated_duration ?? undefined,
+          due_date: updates.due_date,
         });
         set((state) => ({
           tasks: state.tasks.map((t) => (t.id === id ? updated : t)),

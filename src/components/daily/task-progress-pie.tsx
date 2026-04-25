@@ -78,32 +78,32 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
   }
 
   return (
-    <div className="border-t border-border/60">
+    <div className="border-t border-border/30">
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center justify-between px-5 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/20"
+        className="flex w-full items-center justify-between px-6 py-3 text-xs text-muted-foreground/70 transition-colors hover:bg-muted/10"
         aria-label={isExpanded ? '收起进度统计' : '展开进度统计'}
       >
         <div className="flex items-center gap-2">
-          <ListTodo size={14} />
-          <span className="font-medium text-foreground">任务进度</span>
-          <span className="text-xs">
+          <ListTodo size={12} />
+          <span className="font-medium text-foreground/80">任务进度</span>
+          <span className="text-[11px] text-muted-foreground/50">
             {completedCount}/{totalCount}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold" style={{ color: COLORS.completed }}>
+          <span className="text-xs font-medium text-primary">
             {completionRate}%
           </span>
-          {isExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          {isExpanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
         </div>
       </button>
 
       {isExpanded ? (
-        <div className="px-5 pb-4">
+        <div className="px-6 pb-4">
           <div className="flex items-center justify-between">
-            <div className="relative h-20 w-20">
+            <div className="relative h-16 w-16">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -111,8 +111,8 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    outerRadius={35}
-                    innerRadius={24}
+                    outerRadius={28}
+                    innerRadius={20}
                     paddingAngle={1}
                     dataKey="value"
                     strokeWidth={0}
@@ -128,8 +128,8 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <span
                   className={cn(
-                    'text-sm font-bold',
-                    completionRate >= 80 ? 'text-emerald-500' : completionRate >= 50 ? 'text-foreground' : 'text-muted-foreground'
+                    'text-xs font-semibold',
+                    completionRate >= 80 ? 'text-emerald-500' : completionRate >= 50 ? 'text-primary' : 'text-muted-foreground'
                   )}
                 >
                   {completionRate}%
@@ -137,24 +137,24 @@ export function TaskProgressPie({ tasks, dimension = 'all' }: TaskProgressPiePro
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 text-xs">
+            <div className="flex flex-col gap-1.5 text-[11px]">
               <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.completed }} />
-                <span className="text-muted-foreground">
-                  已完成: <span className="font-medium text-foreground">{completedCount}</span>
+                <div className="h-2 w-2 rounded-sm" style={{ backgroundColor: COLORS.completed }} />
+                <span className="text-muted-foreground/70">
+                  已完成: <span className="font-medium text-foreground/70">{completedCount}</span>
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.incomplete }} />
-                <span className="text-muted-foreground">
-                  未完成: <span className="font-medium text-foreground">{totalCount - completedCount}</span>
+                <div className="h-2 w-2 rounded-sm" style={{ backgroundColor: COLORS.incomplete }} />
+                <span className="text-muted-foreground/70">
+                  未完成: <span className="font-medium text-foreground/70">{totalCount - completedCount}</span>
                 </span>
               </div>
             </div>
           </div>
 
           <div className="mt-3">
-            <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: COLORS.incomplete }}>
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted/50">
               <div
                 className="h-full rounded-full transition-all duration-300"
                 style={{

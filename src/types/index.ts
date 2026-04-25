@@ -7,6 +7,7 @@ export interface Task {
   color: string | null;
   tags?: string[];
   estimated_duration: number | null;
+  due_date: string | null;
   deleted?: boolean;
   deleted_at?: string | null;
   created_at: string;
@@ -52,6 +53,7 @@ export interface CreateTaskInput {
   color?: string;
   tags?: string[];
   estimated_duration?: number;
+  due_date?: string;
 }
 
 // 更新任务输入
@@ -62,6 +64,7 @@ export interface UpdateTaskInput {
   color?: string;
   tags?: string[];
   estimated_duration?: number;
+  due_date?: string | null;
 }
 
 // 创建时间块输入

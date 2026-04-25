@@ -12,6 +12,7 @@ pub struct Task {
     #[serde(default)]
     pub tags: Vec<String>,
     pub estimated_duration: Option<i32>,
+    pub due_date: Option<String>,
     #[sqlx(default)]
     pub deleted: bool,
     pub deleted_at: Option<String>,
@@ -54,6 +55,7 @@ pub struct CreateTaskInput {
     #[serde(default)]
     pub tags: Vec<String>,
     pub estimated_duration: Option<i32>,
+    pub due_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +66,7 @@ pub struct UpdateTaskInput {
     pub color: Option<String>,
     pub tags: Option<Vec<String>>,
     pub estimated_duration: Option<i32>,
+    pub due_date: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
