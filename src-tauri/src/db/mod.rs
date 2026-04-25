@@ -141,6 +141,13 @@ async fn ensure_project_schema(pool: &SqlitePool) -> Result<(), String> {
             .map_err(|e| format!("更新任务删除时间字段失败: {}", e))?;
     }
 
+    if !task_columns.iter().any(|column| column == "due_date") {
+        sqlx::query("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+            .execute(pool)
+            .await
+            .map_err(|e| format!("更新任务截止日期字段失败: {}", e))?;
+    }
+
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_tasks_deleted ON tasks(deleted)")
         .execute(pool)
         .await
